@@ -17,7 +17,9 @@
 package com.linecorp.decaton.benchmark;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
@@ -48,11 +50,25 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--param", description = "Key-value parameters to supply for runner")
     private Map<String, String> params = new HashMap<>();
 
+    @Option(names = "--profile", description = "Enable profiling of execution with async-profiler")
+    private boolean enableProfiling;
+
+    @Option(names = "--profiler-bin", description = "Path to async-profiler's profiler.sh")
+    private Path profilerBin;
+
+    @Option(names = "--profiler-opts", description = "Options to pass for async-profiler's profiler.sh")
+    private List<String> profilerOpts;
+
     @Override
     public Integer call() throws Exception {
         BenchmarkConfig config = new BenchmarkConfig(
                 title, runner, tasks, warmupTasks, simulateLatencyMs, bootstrapServers, params);
-        Benchmark benchmark = new Benchmark(config);
+        Profiling profiling = null;
+        if (enableProfiling) {
+            profiling = new Profiling(profilerBin, profilerOpts);
+        }
+
+        Benchmark benchmark = new Benchmark(config, profiling);
         BenchmarkResult result = benchmark.run();
         result.print(config, System.out);
         return 0;

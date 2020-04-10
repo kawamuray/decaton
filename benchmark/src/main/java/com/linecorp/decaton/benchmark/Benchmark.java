@@ -33,9 +33,11 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Benchmark {
     private final BenchmarkConfig config;
+    private final Profiling profiling;
 
-    public Benchmark(BenchmarkConfig config) {
+    public Benchmark(BenchmarkConfig config, Profiling profiling) {
         this.config = config;
+        this.profiling = profiling;
     }
 
     private static TemporaryTopic createTempTopic(String bootstrapServers) {
@@ -64,10 +66,15 @@ public class Benchmark {
         runner.init(config, recording, resourceTracker);
         final Map<Long, TrackingValues> resourceUsageReport;
         try {
+            if (profiling != null) {
+                profiling.start();
+            }
             generateWorkload(bootstrapServers, topic);
             if (!recording.await(3, TimeUnit.MINUTES)) {
                 throw new RuntimeException("timeout on awaiting benchmark to complete");
             }
+            profiling.stop().ifPresent(
+                    outputPath -> log.info("Profiling output is available at {}", outputPath));
             resourceUsageReport = resourceTracker.report();
         } finally {
             try {
