@@ -18,9 +18,11 @@ package com.linecorp.decaton.benchmark;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringTokenizer;
 import java.util.concurrent.Callable;
 
 import picocli.CommandLine;
@@ -57,7 +59,16 @@ public final class Main implements Callable<Integer> {
     private Path profilerBin;
 
     @Option(names = "--profiler-opts", description = "Options to pass for async-profiler's profiler.sh")
-    private List<String> profilerOpts;
+    private String profilerOpts;
+
+    private static List<String> parseOptions(String opts) {
+        StringTokenizer tok = new StringTokenizer(opts);
+        List<String> items = new ArrayList<>();
+        while (tok.hasMoreElements()) {
+            items.add(tok.nextToken());
+        }
+        return items;
+    }
 
     @Override
     public Integer call() throws Exception {
@@ -65,7 +76,7 @@ public final class Main implements Callable<Integer> {
                 title, runner, tasks, warmupTasks, simulateLatencyMs, bootstrapServers, params);
         Profiling profiling = null;
         if (enableProfiling) {
-            profiling = new Profiling(profilerBin, profilerOpts);
+            profiling = new Profiling(profilerBin, parseOptions(profilerOpts));
         }
 
         Benchmark benchmark = new Benchmark(config, profiling);

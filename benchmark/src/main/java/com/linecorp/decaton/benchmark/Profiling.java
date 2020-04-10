@@ -20,7 +20,6 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -37,9 +36,13 @@ public class Profiling {
     public Profiling(Path asyncProfilerBin, List<String> asyncProfilerOpts) {
         this.asyncProfilerBin = asyncProfilerBin;
         if (asyncProfilerOpts == null) {
-            this.asyncProfilerOpts = Arrays.asList("-f", outputFileName());
+            this.asyncProfilerOpts = new ArrayList<>();
         } else {
             this.asyncProfilerOpts = asyncProfilerOpts;
+        }
+        if (!this.asyncProfilerOpts.contains("-f")) {
+            this.asyncProfilerOpts.add("-f");
+            this.asyncProfilerOpts.add(outputFileName());
         }
     }
 
