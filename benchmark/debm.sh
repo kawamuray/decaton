@@ -16,7 +16,7 @@ if [[ "$*" == *--profile* ]] && [[ "$*" != *--profiler-bin* ]] && ! which profil
         url="$ASYNC_PROFILER_URL_BASE/async-profiler-${ASYNC_PROFILER_VERSION}-${platform}-x64.tar.gz"
         echo "Downloading async-profiler from $url into $dir" >&2
         mkdir -p $dir
-        curl -L "$url" | tar x -C $dir
+        curl -L "$url" | tar zx -C $dir
         extra_opts="$extra_opts --profiler-bin=$dir/profiler.sh"
     fi
 fi
