@@ -17,8 +17,8 @@ if [[ "$*" == *--profile* ]] && [[ "$*" != *--profiler-bin* ]] && ! which profil
         echo "Downloading async-profiler from $url into $dir" >&2
         mkdir -p $dir
         curl -L "$url" | tar zx -C $dir
-        extra_opts="$extra_opts --profiler-bin=$dir/profiler.sh"
     fi
+    extra_opts="$extra_opts --profiler-bin=$dir/profiler.sh"
 fi
 
 exec java -cp $(ls $(dirname $0)/build/libs/benchmark-*-shadow.jar | sort -nr | head -1) \
