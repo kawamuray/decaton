@@ -45,10 +45,15 @@ public class PerformanceBoundTest {
     public void testPerformanceBoundBusy() throws InterruptedException {
         Map<String, String> params = new HashMap<>();
         params.put(ProcessorProperties.CONFIG_PARTITION_CONCURRENCY.name(), "8");
-        BenchmarkConfig config = new BenchmarkConfig(
-                "PerformanceBoundBusy", DecatonRunner.class.getCanonicalName(),
-                10_000, 10_000, 0, null, params);
-        Benchmark benchmark = new Benchmark(config, null);
+        BenchmarkConfig config = BenchmarkConfig.builder()
+                                                .title("PerformanceBoundBusy")
+                                                .runner(DecatonRunner.class.getCanonicalName())
+                                                .tasks(10_000)
+                                                .warmupTasks(10_000)
+                                                .simulateLatencyMs(0)
+                                                .params(params)
+                                                .build();
+        Benchmark benchmark = new Benchmark(config);
         List<BenchmarkResult> results = new ArrayList<>(ITERATIONS);
         for (int i = 0; i < ITERATIONS; i++) {
             BenchmarkResult result = benchmark.run();
@@ -63,10 +68,15 @@ public class PerformanceBoundTest {
     public void testPerformanceBoundWithLatency() throws InterruptedException {
         Map<String, String> params = new HashMap<>();
         params.put(ProcessorProperties.CONFIG_PARTITION_CONCURRENCY.name(), "10");
-        BenchmarkConfig config = new BenchmarkConfig(
-                "PerformanceBoundWithLatency", DecatonRunner.class.getCanonicalName(),
-                10_000, 10_000, 10, null, params);
-        Benchmark benchmark = new Benchmark(config, null);
+        BenchmarkConfig config = BenchmarkConfig.builder()
+                                                .title("PerformanceBoundWithLatency")
+                                                .runner(DecatonRunner.class.getCanonicalName())
+                                                .tasks(10_000)
+                                                .warmupTasks(10_000)
+                                                .simulateLatencyMs(10)
+                                                .params(params)
+                                                .build();
+        Benchmark benchmark = new Benchmark(config);
         List<BenchmarkResult> results = new ArrayList<>(ITERATIONS);
         for (int i = 0; i < ITERATIONS; i++) {
             BenchmarkResult result = benchmark.run();

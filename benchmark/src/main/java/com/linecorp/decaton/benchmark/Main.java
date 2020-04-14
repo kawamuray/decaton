@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.concurrent.Callable;
 
+import com.linecorp.decaton.benchmark.BenchmarkConfig.ProfilingConfig;
+
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -86,14 +88,14 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        BenchmarkConfig config = new BenchmarkConfig(
-                title, runner, tasks, warmupTasks, simulateLatencyMs, bootstrapServers, params);
-        Profiling profiling = null;
+        BenchmarkConfig.ProfilingConfig profiling = null;
         if (enableProfiling) {
-            profiling = new Profiling(profilerBin, parseOptions(profilerOpts));
+            profiling = new ProfilingConfig(profilerBin, parseOptions(profilerOpts));
         }
+        BenchmarkConfig config = new BenchmarkConfig(
+                title, runner, tasks, warmupTasks, simulateLatencyMs, bootstrapServers, params, profiling);
 
-        Benchmark benchmark = new Benchmark(config, profiling);
+        Benchmark benchmark = new Benchmark(config);
         BenchmarkResult result = benchmark.run();
         result.print(config, System.out);
         return 0;
