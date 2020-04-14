@@ -16,6 +16,8 @@
 
 package com.linecorp.decaton.benchmark;
 
+import static java.util.Collections.emptyList;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -34,19 +36,26 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--title", description = "Title of the case to test", required = true)
     private String title;
 
-    @Option(names = "--runner", description = "Fully-qualified runner class name that implements Runner", required = true)
+    @Option(names = "--runner", description = "Fully-qualified runner class name that implements Runner",
+            required = true,
+            defaultValue = "com.linecorp.decaton.benchmark.DecatonRunner")
     private String runner;
 
     @Option(names = "--tasks", description = "Number of tasks to generate for testing", required = true)
     private int tasks;
 
-    @Option(names = "--warmup", description = "Number of tasks to apply for warm up execution (class loading, JIT compile...) before start measurement", defaultValue = "10")
+    @Option(names = "--warmup",
+            description = "Number of tasks to apply for warm up execution (class loading, JIT compile...) before start measurement",
+            defaultValue = "10")
     private int warmupTasks;
 
-    @Option(names = "--simulate-latency", description = "Latency in milliseconds to inject for simulating processing time for each tasks", defaultValue = "0")
+    @Option(names = "--simulate-latency",
+            description = "Latency in milliseconds to inject for simulating processing time for each tasks",
+            defaultValue = "0")
     private int simulateLatencyMs;
 
-    @Option(names = "--bootstrap-servers", description = "Optional bootstrap.servers property. if supplied, the specified kafka cluster is used for benchmarking instead of local embedded clusters")
+    @Option(names = "--bootstrap-servers",
+            description = "Optional bootstrap.servers property. if supplied, the specified kafka cluster is used for benchmarking instead of local embedded clusters")
     private String bootstrapServers;
 
     @Option(names = "--param", description = "Key-value parameters to supply for runner")
@@ -55,13 +64,18 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--profile", description = "Enable profiling of execution with async-profiler")
     private boolean enableProfiling;
 
-    @Option(names = "--profiler-bin", description = "Path to async-profiler's profiler.sh")
+    @Option(names = "--profiler-bin", description = "Path to async-profiler's profiler.sh",
+            defaultValue = "profiler.sh")
     private Path profilerBin;
 
     @Option(names = "--profiler-opts", description = "Options to pass for async-profiler's profiler.sh")
     private String profilerOpts;
 
     private static List<String> parseOptions(String opts) {
+        if (opts == null) {
+            return emptyList();
+        }
+
         StringTokenizer tok = new StringTokenizer(opts);
         List<String> items = new ArrayList<>();
         while (tok.hasMoreElements()) {

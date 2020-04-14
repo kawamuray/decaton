@@ -16,10 +16,15 @@
 
 package com.linecorp.decaton.benchmark;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -33,12 +38,12 @@ public class Profiling {
     private final Path asyncProfilerBin;
     private final List<String> asyncProfilerOpts;
 
-    public Profiling(Path asyncProfilerBin, List<String> asyncProfilerOpts) {
+    public Profiling(Path asyncProfilerBin, Collection<String> asyncProfilerOpts) {
         this.asyncProfilerBin = asyncProfilerBin;
         if (asyncProfilerOpts == null) {
             this.asyncProfilerOpts = new ArrayList<>();
         } else {
-            this.asyncProfilerOpts = asyncProfilerOpts;
+            this.asyncProfilerOpts = new ArrayList<>(asyncProfilerOpts);
         }
         if (!this.asyncProfilerOpts.contains("-f")) {
             this.asyncProfilerOpts.add("-f");
@@ -67,12 +72,27 @@ public class Profiling {
                 throw new RuntimeException("timed out waiting async-profiler command");
             }
             if (process.exitValue() != 0) {
+                log.error("Async profiler exit with error: {}", readAllOut(process.getErrorStream()));
                 throw new RuntimeException("async-profiler exits with error: " + process.exitValue());
             }
         } catch (Exception e) {
             log.error("Failed to run profiler command: {}", cmd, e);
             throw new RuntimeException(e);
         }
+    }
+
+    private static String readAllOut(InputStream errorStream) {
+        StringBuilder out = new StringBuilder();
+        BufferedReader bf = new BufferedReader(new InputStreamReader(errorStream));
+        String line;
+        try {
+            while ((line = bf.readLine()) != null) {
+                out.append(line);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return out.toString();
     }
 
     public void start() {

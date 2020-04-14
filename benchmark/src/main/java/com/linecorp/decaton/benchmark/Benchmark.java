@@ -73,8 +73,10 @@ public class Benchmark {
             if (!recording.await(3, TimeUnit.MINUTES)) {
                 throw new RuntimeException("timeout on awaiting benchmark to complete");
             }
-            profiling.stop().ifPresent(
-                    outputPath -> log.info("Profiling output is available at {}", outputPath));
+            if (profiling != null) {
+                profiling.stop().ifPresent(
+                        outputPath -> log.info("Profiling output is available at {}", outputPath));
+            }
             resourceUsageReport = resourceTracker.report();
         } finally {
             try {

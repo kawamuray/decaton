@@ -48,7 +48,7 @@ public class PerformanceBoundTest {
         BenchmarkConfig config = new BenchmarkConfig(
                 "PerformanceBoundBusy", DecatonRunner.class.getCanonicalName(),
                 10_000, 10_000, 0, null, params);
-        Benchmark benchmark = new Benchmark(config);
+        Benchmark benchmark = new Benchmark(config, null);
         List<BenchmarkResult> results = new ArrayList<>(ITERATIONS);
         for (int i = 0; i < ITERATIONS; i++) {
             BenchmarkResult result = benchmark.run();
