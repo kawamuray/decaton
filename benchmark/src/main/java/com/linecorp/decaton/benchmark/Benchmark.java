@@ -40,7 +40,7 @@ public class Benchmark {
 
     private static void generateWorkload(String bootstrapServers, String topic, int numTasks, int latencyMs) {
         RecordsGenerator generator = new RecordsGenerator();
-        log.info("Generate {} tasks", numTasks);
+        log.info("Generate {} tasks with latency {} ms", numTasks, latencyMs);
         try {
             generator.generate(bootstrapServers, topic, numTasks, latencyMs);
         } catch (InterruptedException e) {
@@ -54,8 +54,10 @@ public class Benchmark {
         Execution execution = new ForkingExecution();
         return execution.execute(config, stage -> {
             if (stage == Stage.READY_WARMUP) {
+                log.info("Start warmup with {} tasks", this.config.warmupTasks());
                 generateWorkload(bootstrapServers, topic, this.config.warmupTasks(), 0);
             } else if (stage == Stage.READY) {
+                log.info("Start real run with {} tasks", this.config.tasks());
                 generateWorkload(bootstrapServers, topic, this.config.tasks(), this.config.simulateLatencyMs());
             }
         });

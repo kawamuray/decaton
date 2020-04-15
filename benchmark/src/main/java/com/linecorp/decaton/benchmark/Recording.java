@@ -95,9 +95,6 @@ public class Recording {
                 children.add(child);
             }
         }
-        if (seq == warmupTasks) {
-            warmupLatch.countDown();
-        }
         if (seq == warmupTasks + 1) {
             startTimeMs = System.currentTimeMillis();
             log.debug("Start recording time: {}", startTimeMs);
@@ -105,6 +102,9 @@ public class Recording {
         child.process(task, warmup);
         if (log.isTraceEnabled()) {
             log.trace("Task {} completed by thread: {}", seq, Thread.currentThread().getName());
+        }
+        if (seq == warmupTasks) {
+            warmupLatch.countDown();
         }
         if (seq == tasks + warmupTasks) {
             completeTimeMs = System.currentTimeMillis();

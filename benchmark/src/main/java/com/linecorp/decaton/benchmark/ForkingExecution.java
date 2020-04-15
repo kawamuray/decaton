@@ -54,6 +54,7 @@ public class ForkingExecution implements Execution {
     public BenchmarkResult execute(Config config, Consumer<Stage> stageCallback) {
         String[] cmd = {
                 javaBin().toString(),
+                "-server",
                 "-cp", currentClasspath(),
                 ForkingExecution.class.getName(),
                 serializeConfig(config),
@@ -68,8 +69,9 @@ public class ForkingExecution implements Execution {
             log.error("Failed to spawn child process: {}", cmd, e);
             throw new RuntimeException("failed to spawn child process", e);
         }
+        final BenchmarkResult result;
         try {
-            return communicate(process.getInputStream(), stageCallback);
+             result = communicate(process.getInputStream(), stageCallback);
         } catch (IOException e) {
             throw new RuntimeException("error while communicating with child", e);
         } finally {
@@ -78,10 +80,11 @@ public class ForkingExecution implements Execution {
             } catch (InterruptedException e) {
                 log.warn("Interrupted while waiting child", e);
             }
-            if (process.exitValue() != 0) {
-                throw new RuntimeException("child exit with error: " + process.exitValue());
-            }
         }
+        if (process.exitValue() != 0) {
+            throw new RuntimeException("child exit with error: " + process.exitValue());
+        }
+        return result;
     }
 
     private static BenchmarkResult communicate(InputStream in, Consumer<Stage> stageCallback)
