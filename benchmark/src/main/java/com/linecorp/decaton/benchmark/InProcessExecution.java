@@ -64,7 +64,7 @@ public class InProcessExecution implements Execution {
             long time = compileMxBean.getTotalCompilationTime();
             while (true) {
                 log.debug("Waiting JIT compilation to get stable... time={}", time);
-                Thread.sleep(1000);
+                Thread.sleep(5000);
                 long newTime =compileMxBean.getTotalCompilationTime();
                 if (time == newTime) {
                     break;
