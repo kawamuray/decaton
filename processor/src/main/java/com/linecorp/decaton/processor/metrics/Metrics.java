@@ -44,6 +44,16 @@ public class Metrics {
         this.availableTags = availableTags;
     }
 
+    public class SubscriptionMetrics {
+        public final Timer consumerPollTime =
+                Timer.builder("subscription.consumer.poll.time")
+                     .description("Time waiting Consumer#poll to return")
+                     .tags(availableTags.subscriptionScope())
+                     .distributionStatisticExpiry(Duration.ofSeconds(60))
+                     .publishPercentiles(0.5, 0.9, 0.99, 0.999)
+                     .register(registry);
+    }
+
     public class TaskMetrics {
         public final Counter tasksProcessed =
                 Counter.builder("tasks.processed")

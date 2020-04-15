@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -34,9 +35,12 @@ import com.linecorp.decaton.processor.StaticPropertySupplier;
 import com.linecorp.decaton.processor.SubscriptionStateListener;
 import com.linecorp.decaton.processor.TaskExtractor;
 import com.linecorp.decaton.processor.TaskMetadata;
+import com.linecorp.decaton.processor.metrics.Metrics;
 import com.linecorp.decaton.processor.runtime.ProcessorScope;
 import com.linecorp.decaton.processor.runtime.ProcessorSubscription;
 import com.linecorp.decaton.processor.runtime.SubscriptionBuilder;
+
+import io.micrometer.core.instrument.Timer;
 
 public class DecatonRunner implements Runner {
     private static final Map<String, Function<String, Object>> propertyConstructors =
@@ -98,6 +102,9 @@ public class DecatonRunner implements Runner {
 
     @Override
     public void close() throws Exception {
+        Timer timer = Metrics.registry().find("subscription.consumer.poll.time").timer();
+        System.err.printf("subscription.consumer.poll.time MEAN=%.2f MAX=%.2f\n",
+                          timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
         if (subscription != null) {
             subscription.close();
         }
