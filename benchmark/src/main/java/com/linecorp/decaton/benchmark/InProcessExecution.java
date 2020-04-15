@@ -58,6 +58,7 @@ public class InProcessExecution implements Execution {
                 profiling.start();
             }
 
+            Thread.sleep(3000);
             stageCallback.accept(Stage.READY);
             if (!recording.await(3, TimeUnit.MINUTES)) {
                 throw new RuntimeException("timeout on awaiting benchmark to complete");
