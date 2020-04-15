@@ -17,12 +17,12 @@
 package com.linecorp.decaton.benchmark;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -102,9 +102,12 @@ public class DecatonRunner implements Runner {
 
     @Override
     public void close() throws Exception {
-        Timer timer = Metrics.registry().get("decaton.subscription.consumer.poll.time").timer();
-        System.err.printf("subscription.consumer.poll.time MEAN=%.2f MAX=%.2f\n",
-                          timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
+        Timer timer = Metrics.registry().get("decaton.subscription.consumer.poll.time")
+                             .tag("subscription", "decaton-benchmark")
+                             .timer();
+        System.err.println("timer = " + timer.takeSnapshot());
+        System.err.printf("subscription.consumer.poll.time PERCENTILES=%s\n",
+                          Arrays.toString(timer.takeSnapshot().percentileValues()));
         if (subscription != null) {
             subscription.close();
         }

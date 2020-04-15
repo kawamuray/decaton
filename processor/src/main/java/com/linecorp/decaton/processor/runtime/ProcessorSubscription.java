@@ -75,7 +75,7 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         this.stateListener = stateListener;
         terminated = new AtomicBoolean();
         contexts = new PartitionContexts(scope, processors);
-        metrics = Metrics.withTags("subscription",scope.subscriptionId()).new SubscriptionMetrics();
+        metrics = Metrics.withTags("subscription", scope.subscriptionId()).new SubscriptionMetrics();
 
         blacklistedKeysFilter = new BlacklistedKeysFilter(props);
         commitIntervalMillis = props.get(ProcessorProperties.CONFIG_COMMIT_INTERVAL_MS);
