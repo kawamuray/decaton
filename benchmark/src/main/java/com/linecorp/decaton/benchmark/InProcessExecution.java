@@ -16,6 +16,8 @@
 
 package com.linecorp.decaton.benchmark;
 
+import java.lang.management.CompilationMXBean;
+import java.lang.management.ManagementFactory;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -58,6 +60,17 @@ public class InProcessExecution implements Execution {
                 profiling.start();
             }
 
+            CompilationMXBean compileMxBean = ManagementFactory.getCompilationMXBean();
+            long time = compileMxBean.getTotalCompilationTime();
+            while (true) {
+                log.debug("Waiting JIT compilation to get stable... time={}", time);
+                Thread.sleep(1000);
+                long newTime =compileMxBean.getTotalCompilationTime();
+                if (time == newTime) {
+                    break;
+                }
+                time = newTime;
+            }
             Thread.sleep(3000);
             stageCallback.accept(Stage.READY);
             if (!recording.await(3, TimeUnit.MINUTES)) {
