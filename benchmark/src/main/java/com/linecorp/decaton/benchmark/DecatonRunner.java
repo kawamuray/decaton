@@ -102,7 +102,7 @@ public class DecatonRunner implements Runner {
 
     @Override
     public void close() throws Exception {
-        Timer timer = Metrics.registry().find("subscription.consumer.poll.time").timer();
+        Timer timer = Metrics.registry().get("decaton.subscription.consumer.poll.time").timer();
         System.err.printf("subscription.consumer.poll.time MEAN=%.2f MAX=%.2f\n",
                           timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
         if (subscription != null) {
