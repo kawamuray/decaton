@@ -43,6 +43,7 @@ import com.linecorp.decaton.processor.runtime.ProcessorScope;
 import com.linecorp.decaton.processor.runtime.ProcessorSubscription;
 import com.linecorp.decaton.processor.runtime.SubscriptionBuilder;
 
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.prometheus.PrometheusConfig;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
@@ -111,6 +112,14 @@ public class DecatonRunner implements Runner {
         Collection<Timer> timers = Metrics.registry().get("decaton.subscription.process.durations")
                                           .tag("subscription", "decaton-benchmark")
                                           .timers();
+        DistributionSummary pollCount = Metrics.registry().get("decaton.subscription.poll.records")
+                                               .tag("subscription", "decaton-benchmark")
+                                               .summaries().iterator().next();
+        System.err.printf("subscription.poll.records: [%s]\n",
+                          Arrays.stream(pollCount.takeSnapshot().percentileValues())
+                                .map(p -> String.format("%.1f:%.2f", p.percentile() * 100,
+                                                        p.value(TimeUnit.MILLISECONDS)))
+                                .collect(Collectors.joining(", ")));
         for (Timer timer : timers) {
             System.err.printf("subscription.consumer.poll.time [%s] [%s]\n",
                               timer.getId().getTag("scope"),

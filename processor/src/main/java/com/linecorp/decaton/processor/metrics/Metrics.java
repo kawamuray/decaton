@@ -19,6 +19,7 @@ package com.linecorp.decaton.processor.metrics;
 import java.time.Duration;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Meter.Id;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -63,6 +64,14 @@ public class Metrics {
         public final Timer partitionPauseTime = processDuration("pause");
 
         public final Timer commitOffsetTime = processDuration("commit");
+
+        public final DistributionSummary pollRecordsCount =
+                DistributionSummary.builder("subscription.poll.records")
+                                   .description("Number of records returned by single Consumer#poll")
+                                   .tags(availableTags.subscriptionScope())
+                                   .distributionStatisticExpiry(Duration.ofSeconds(60))
+                                   .publishPercentiles(0.5, 0.9, 0.99, 0.999)
+                                   .register(registry);
     }
 
     public class TaskMetrics {

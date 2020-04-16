@@ -270,6 +270,8 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         Timer timer = Utils.timer();
         ConsumerRecords<String, byte[]> records = consumer.poll(POLL_TIMEOUT_MILLIS);
         metrics.consumerPollTime.record(timer.duration());
+        int count = records.count();
+        metrics.pollRecordsCount.record(count);
 
         timer = Utils.timer();
         records.forEach(record -> {
