@@ -233,7 +233,9 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
                 pollOnce(consumer);
                 if (System.currentTimeMillis() - lastCommittedMillis >= commitIntervalMillis.value()) {
                     try {
+                        Timer timer = Utils.timer();
                         commitCompletedOffsets(consumer);
+                        metrics.commitOffsetTime.record(timer.duration());
                     } catch (CommitFailedException | TimeoutException e) {
                         logger.warn("Offset commit failed, but continuing to consume", e);
                         // Continue processing, assuming commit will be handled successfully in next attempt.
@@ -269,6 +271,7 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         ConsumerRecords<String, byte[]> records = consumer.poll(POLL_TIMEOUT_MILLIS);
         metrics.consumerPollTime.record(timer.duration());
 
+        timer = Utils.timer();
         records.forEach(record -> {
             TopicPartition tp = new TopicPartition(record.topic(), record.partition());
             PartitionContext context = contexts.get(tp);
@@ -282,10 +285,17 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
                 completion.complete();
             }
         });
+        metrics.handleRecordsTime.record(timer.duration());
+
         contexts.updateHighWatermarks();
+        timer = Utils.timer();
         contexts.maybeHandlePropertyReload();
+        metrics.reloadTime.record(timer.duration());
+
+        timer = Utils.timer();
         pausePartitions(consumer);
         resumePartitions(consumer);
+        metrics.partitionPauseTime.record(timer.duration());
     }
 
     private void pausePartitions(Consumer<?, ?> consumer) {

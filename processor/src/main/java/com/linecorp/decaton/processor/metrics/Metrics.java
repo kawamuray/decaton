@@ -45,13 +45,24 @@ public class Metrics {
     }
 
     public class SubscriptionMetrics {
-        public final Timer consumerPollTime =
-                Timer.builder("subscription.consumer.poll.time")
-                     .description("Time waiting Consumer#poll to return")
-                     .tags(availableTags.subscriptionScope())
-                     .distributionStatisticExpiry(Duration.ofSeconds(60))
-                     .publishPercentiles(0.5, 0.9, 0.99, 0.999)
-                     .register(registry);
+        private Timer processDuration(String scope) {
+            return Timer.builder("subscription.process.durations")
+                 .description("Time waiting Consumer#poll to return")
+                 .tags(availableTags.subscriptionScope().and("scope", scope))
+                 .distributionStatisticExpiry(Duration.ofSeconds(60))
+                 .publishPercentiles(0.5, 0.9, 0.99, 0.999)
+                 .register(registry);
+        }
+
+        public final Timer consumerPollTime = processDuration("poll");
+
+        public final Timer handleRecordsTime = processDuration("records");
+
+        public final Timer reloadTime = processDuration("reload");
+
+        public final Timer partitionPauseTime = processDuration("pause");
+
+        public final Timer commitOffsetTime = processDuration("commit");
     }
 
     public class TaskMetrics {

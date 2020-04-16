@@ -17,6 +17,7 @@
 package com.linecorp.decaton.benchmark;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,13 +106,16 @@ public class DecatonRunner implements Runner {
 
     @Override
     public void close() throws Exception {
-        Timer timer = Metrics.registry().get("decaton.subscription.consumer.poll.time")
-                             .tag("subscription", "decaton-benchmark")
-                             .timer();
-        System.err.printf("subscription.consumer.poll.time MEAN=%.2f, MAX=%.2f\n",
-                          timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
-        if (subscription != null) {
-            subscription.close();
+        Collection<Timer> timers = Metrics.registry().get("decaton.subscription.process.durations")
+                                                .tag("subscription", "decaton-benchmark")
+                                                .timers();
+        for (Timer timer : timers) {
+            System.err.printf("subscription.consumer.poll.time [%s] MEAN=%.2f, MAX=%.2f\n",
+                              timer.getId().getTag("scope"),
+                              timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
+        }
+        if (this.subscription != null) {
+            this.subscription.close();
         }
     }
 }
