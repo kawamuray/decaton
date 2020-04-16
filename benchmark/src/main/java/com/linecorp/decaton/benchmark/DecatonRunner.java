@@ -17,12 +17,12 @@
 package com.linecorp.decaton.benchmark;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -41,6 +41,8 @@ import com.linecorp.decaton.processor.runtime.ProcessorSubscription;
 import com.linecorp.decaton.processor.runtime.SubscriptionBuilder;
 
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.prometheus.PrometheusConfig;
+import io.micrometer.prometheus.PrometheusMeterRegistry;
 
 public class DecatonRunner implements Runner {
     private static final Map<String, Function<String, Object>> propertyConstructors =
@@ -98,6 +100,7 @@ public class DecatonRunner implements Runner {
         subscription.start();
 
         startLatch.await();
+        Metrics.register(new PrometheusMeterRegistry(PrometheusConfig.DEFAULT));
     }
 
     @Override
@@ -105,9 +108,8 @@ public class DecatonRunner implements Runner {
         Timer timer = Metrics.registry().get("decaton.subscription.consumer.poll.time")
                              .tag("subscription", "decaton-benchmark")
                              .timer();
-        System.err.println("timer = " + timer.takeSnapshot());
-        System.err.printf("subscription.consumer.poll.time PERCENTILES=%s\n",
-                          Arrays.toString(timer.takeSnapshot().percentileValues()));
+        System.err.printf("subscription.consumer.poll.time MEAN=%.2f, MAX=%.2f\n",
+                          timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
         if (subscription != null) {
             subscription.close();
         }

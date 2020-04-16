@@ -17,5 +17,9 @@ dependencies {
     implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:$jacksonVersion"
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion"
 
+    implementation 'io.micrometer:micrometer-registry-prometheus:latest.release'
+
+
+
     runtimeOnly "ch.qos.logback:logback-classic:1.2.3"
 }
