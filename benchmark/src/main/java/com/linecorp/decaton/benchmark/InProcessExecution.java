@@ -16,12 +16,17 @@
 
 package com.linecorp.decaton.benchmark;
 
+import static java.util.stream.Collectors.toMap;
+
 import java.lang.management.CompilationMXBean;
 import java.lang.management.ManagementFactory;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import com.linecorp.decaton.benchmark.BenchmarkResult.JvmStats;
+import com.linecorp.decaton.benchmark.BenchmarkResult.JvmStats.GcStats;
 import com.linecorp.decaton.benchmark.BenchmarkResult.Performance;
 import com.linecorp.decaton.benchmark.BenchmarkResult.ResourceUsage;
 import com.linecorp.decaton.benchmark.ResourceTracker.TrackingValues;
@@ -47,10 +52,11 @@ public class InProcessExecution implements Execution {
                                                        bmConfig.params());
         Profiling profiling = null;
         if (bmConfig.profiling() != null) {
-            profiling = new Profiling(bmConfig.profiling().profilerBin() ,bmConfig.profiling().profilerOpts());
+            profiling = new Profiling(bmConfig.profiling().profilerBin(), bmConfig.profiling().profilerOpts());
         }
         runner.init(runnerConfig, recording, resourceTracker);
         final Map<Long, TrackingValues> resourceUsageReport;
+        final Map<String, JvmTracker.TrackingValues> jvmReport;
         try {
             stageCallback.accept(Stage.READY_WARMUP);
             if (!recording.awaitWarmupComplete(3, TimeUnit.MINUTES)) {
@@ -65,13 +71,15 @@ public class InProcessExecution implements Execution {
             while (true) {
                 log.debug("Waiting JIT compilation to get stable... time={}", time);
                 Thread.sleep(5000);
-                long newTime =compileMxBean.getTotalCompilationTime();
+                long newTime = compileMxBean.getTotalCompilationTime();
                 if (time == newTime) {
                     break;
                 }
                 time = newTime;
             }
             Thread.sleep(3000);
+
+            JvmTracker jvmTracker = JvmTracker.create();
             stageCallback.accept(Stage.READY);
             if (!recording.await(3, TimeUnit.MINUTES)) {
                 throw new RuntimeException("timeout on awaiting benchmark to complete");
@@ -80,6 +88,7 @@ public class InProcessExecution implements Execution {
                 profiling.stop().ifPresent(
                         outputPath -> log.info("Profiling output is available at {}", outputPath));
             }
+            jvmReport = jvmTracker.report();
             resourceUsageReport = resourceTracker.report();
         } finally {
             try {
@@ -90,11 +99,12 @@ public class InProcessExecution implements Execution {
         }
 
         stageCallback.accept(Stage.FINISH);
-        return assembleResult(recording, resourceUsageReport);
+        return assembleResult(recording, resourceUsageReport, jvmReport);
     }
 
     private static BenchmarkResult assembleResult(Recording recording,
-                                                  Map<Long, TrackingValues> resourceUsageReport) {
+                                                  Map<Long, TrackingValues> resourceUsageReport,
+                                                  Map<String, JvmTracker.TrackingValues> jvmReport) {
         Performance performance = recording.computeResult();
         int threads = resourceUsageReport.size();
         TrackingValues resourceValues =
@@ -106,6 +116,10 @@ public class InProcessExecution implements Execution {
         ResourceUsage resource = new ResourceUsage(threads,
                                                    resourceValues.cpuTime(),
                                                    resourceValues.allocatedBytes());
-        return new BenchmarkResult(performance, resource);
+        Map<String, GcStats> gcStats = jvmReport.entrySet().stream().collect(toMap(
+                Entry::getKey,
+                e -> new GcStats(e.getValue().count(), e.getValue().time())));
+        JvmStats jvmStats = new JvmStats(gcStats);
+        return new BenchmarkResult(performance, resource, jvmStats);
     }
 }
