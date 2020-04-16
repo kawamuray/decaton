@@ -30,7 +30,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
 public class ConsumerSupplier implements Supplier<Consumer<String, byte[]>> {
-    public static final int MAX_MAX_POLL_RECORDS = 5000;
+    public static final int MAX_MAX_POLL_RECORDS = 100; // 5000;
 
     private static final Map<String, String> configOverwrites = new HashMap<String, String>() {{
         put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");

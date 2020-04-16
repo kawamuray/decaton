@@ -133,6 +133,12 @@ public class Metrics {
                           .tags(availableTags.partitionScope())
                           .register(registry);
 
+        public final Counter queueExhaustCount =
+                Counter.builder("partition.queue.exhaust")
+                       .description("Number of occurrences that the partition's queue become empty")
+                       .tags(availableTags.subscriptionScope())
+                       .register(registry);
+
         public final Timer partitionPausedTime =
                 Timer.builder("partition.paused.time")
                      .description("The accumulated time the partition paused awaiting pending tasks' completion")

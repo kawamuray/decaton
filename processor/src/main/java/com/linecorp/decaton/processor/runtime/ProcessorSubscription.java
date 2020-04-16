@@ -231,6 +231,8 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
             long lastCommittedMillis = System.currentTimeMillis();
             while (!terminated.get()) {
                 pollOnce(consumer);
+                contexts.updateHighWatermarks();
+
                 if (System.currentTimeMillis() - lastCommittedMillis >= commitIntervalMillis.value()) {
                     try {
                         Timer timer = Utils.timer();
@@ -292,7 +294,6 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         });
         metrics.handleRecordsTime.record(timer.duration());
 
-        contexts.updateHighWatermarks();
         timer = Utils.timer();
         contexts.maybeHandlePropertyReload();
         metrics.reloadTime.record(timer.duration());

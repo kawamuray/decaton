@@ -43,6 +43,7 @@ import com.linecorp.decaton.processor.runtime.ProcessorScope;
 import com.linecorp.decaton.processor.runtime.ProcessorSubscription;
 import com.linecorp.decaton.processor.runtime.SubscriptionBuilder;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.prometheus.PrometheusConfig;
@@ -115,11 +116,15 @@ public class DecatonRunner implements Runner {
         DistributionSummary pollCount = Metrics.registry().get("decaton.subscription.poll.records")
                                                .tag("subscription", "decaton-benchmark")
                                                .summaries().iterator().next();
+        Counter exhausts = Metrics.registry().get("decaton.partition.queue.exhaust")
+                                      .tag("subscription", "decaton-benchmark")
+                                      .counter();
         System.err.printf("subscription.poll.records: [%s]\n",
                           Arrays.stream(pollCount.takeSnapshot().percentileValues())
                                 .map(p -> String.format("%.1f:%.2f", p.percentile() * 100,
                                                         p.value(TimeUnit.MILLISECONDS)))
                                 .collect(Collectors.joining(", ")));
+        System.err.printf("partition.queue.exhaust: %.2f\n", exhausts.count());
         for (Timer timer : timers) {
             System.err.printf("subscription.consumer.poll.time [%s] [%s]\n",
                               timer.getId().getTag("scope"),
@@ -129,8 +134,8 @@ public class DecatonRunner implements Runner {
                                                             p.value(TimeUnit.MILLISECONDS)))
                                     .collect(Collectors.joining(", ")));
         }
-        if (subscription != null) {
-            subscription.close();
+        if (this.subscription != null) {
+            this.subscription.close();
         }
     }
 }

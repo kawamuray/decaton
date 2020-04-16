@@ -87,8 +87,13 @@ public class PartitionContext {
     }
 
     public void updateHighWatermark() {
+        int before = commitControl.pendingOffsetsCount();
         commitControl.updateHighWatermark();
-        metrics.tasksPending.set(commitControl.pendingOffsetsCount());
+        int after = commitControl.pendingOffsetsCount();
+        metrics.tasksPending.set(after);
+        if (before > 0 && after == 0) {
+            metrics.queueExhaustCount.increment();
+        }
     }
 
     public int pendingTasksCount() {
