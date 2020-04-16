@@ -17,6 +17,7 @@
 package com.linecorp.decaton.benchmark;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,7 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 
@@ -107,15 +109,19 @@ public class DecatonRunner implements Runner {
     @Override
     public void close() throws Exception {
         Collection<Timer> timers = Metrics.registry().get("decaton.subscription.process.durations")
-                                                .tag("subscription", "decaton-benchmark")
-                                                .timers();
+                                          .tag("subscription", "decaton-benchmark")
+                                          .timers();
         for (Timer timer : timers) {
-            System.err.printf("subscription.consumer.poll.time [%s] MEAN=%.2f, MAX=%.2f\n",
+            System.err.printf("subscription.consumer.poll.time [%s] [%s]\n",
                               timer.getId().getTag("scope"),
-                              timer.mean(TimeUnit.MILLISECONDS), timer.max(TimeUnit.MILLISECONDS));
+                              Arrays.stream(timer.takeSnapshot().percentileValues())
+                                    .filter(p -> p.percentile() > 0.8)
+                                    .map(p -> String.format("%.1f:%.2f", p.percentile() * 100,
+                                                            p.value(TimeUnit.MILLISECONDS)))
+                                    .collect(Collectors.joining(", ")));
         }
-        if (this.subscription != null) {
-            this.subscription.close();
+        if (subscription != null) {
+            subscription.close();
         }
     }
 }
