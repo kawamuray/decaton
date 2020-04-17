@@ -167,6 +167,13 @@ public class DecatonRunner implements Runner {
                                                .counter();
         System.err.printf("subscription.poll.small.records: [%s]\n", smallRecords.count());
         System.err.printf("partition.queue.exhaust: %.2f\n", exhausts.count());
+
+        Counter exhaustsTime = Metrics.registry().get("decaton.partition.queue.exhaust.time")
+                                  .tag("subscription", "decaton-benchmark")
+                                  .counter();
+        System.err.printf("partition.queue.exhaust.time: %d\n",
+                          TimeUnit.NANOSECONDS.toMillis((long) exhaustsTime.count()));
+
         for (Timer timer : timers) {
             System.err.printf("subscription.consumer.poll.time [%s] [%s]\n",
                               timer.getId().getTag("scope"),

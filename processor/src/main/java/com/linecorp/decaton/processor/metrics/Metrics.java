@@ -149,9 +149,16 @@ public class Metrics {
                        .tags(availableTags.subscriptionScope())
                        .register(registry);
 
+        public final Counter queueExhaustTime =
+                Counter.builder("partition.queue.exhaust.time")
+                       .description("Duration of this partition queue stayed empty")
+                       .tags(availableTags.subscriptionScope())
+                       .register(registry);
+
         public final Timer partitionPausedTime =
                 Timer.builder("partition.paused.time")
-                     .description("The accumulated time the partition paused awaiting pending tasks' completion")
+                     .description(
+                             "The accumulated time the partition paused awaiting pending tasks' completion")
                      .tags(availableTags.partitionScope())
                      .register(registry);
 
