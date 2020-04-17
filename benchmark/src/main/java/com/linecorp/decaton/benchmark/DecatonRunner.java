@@ -29,6 +29,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.metrics.KafkaMetric;
+import org.apache.kafka.common.metrics.MetricsReporter;
 
 import com.linecorp.decaton.processor.DecatonTask;
 import com.linecorp.decaton.processor.ProcessorProperties;
@@ -58,6 +60,41 @@ public class DecatonRunner implements Runner {
 
     private ProcessorSubscription subscription;
 
+    public static class PrintMetricReporter implements MetricsReporter {
+        private final List<KafkaMetric> metrics = new ArrayList<>();
+
+        private synchronized void handle(KafkaMetric metric) {
+            if (metric.metricName().name().startsWith("commit-latency-")) {
+                metrics.add(metric);
+            }
+        }
+
+        @Override
+        public void init(List<KafkaMetric> metrics) {
+            metrics.forEach(this::handle);
+        }
+
+        @Override
+        public void metricChange(KafkaMetric metric) {
+            handle(metric);
+        }
+
+        @Override
+        public void metricRemoval(KafkaMetric metric) {
+        }
+
+        @Override
+        public void close() {
+            for (KafkaMetric metric : metrics) {
+                System.err.printf("%s: %s\n", metric.metricName().name(), metric.metricValue());
+            }
+        }
+
+        @Override
+        public void configure(Map<String, ?> configs) {
+        }
+    }
+
     @Override
     public void init(Config config, Recording recording, ResourceTracker resourceTracker)
             throws InterruptedException {
@@ -65,6 +102,8 @@ public class DecatonRunner implements Runner {
         props.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, config.bootstrapServers());
         props.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "decaton-benchmark");
         props.setProperty(ConsumerConfig.CLIENT_ID_CONFIG, "decaton-benchmark");
+        props.setProperty(ConsumerConfig.METRIC_REPORTER_CLASSES_CONFIG,
+                          PrintMetricReporter.class.getName());
 
         List<Property<?>> properties = new ArrayList<>();
         for (Map.Entry<String, String> entry : config.parameters().entrySet()) {
