@@ -117,12 +117,11 @@ public class DecatonRunner implements Runner {
                                                .tag("subscription", "decaton-benchmark")
                                                .summaries().iterator().next();
         Counter exhausts = Metrics.registry().get("decaton.partition.queue.exhaust")
-                                      .tag("subscription", "decaton-benchmark")
-                                      .counter();
+                                  .tag("subscription", "decaton-benchmark")
+                                  .counter();
         System.err.printf("subscription.poll.records: [%s]\n",
                           Arrays.stream(pollCount.takeSnapshot().percentileValues())
-                                .map(p -> String.format("%.1f:%.2f", p.percentile() * 100,
-                                                        p.value(TimeUnit.MILLISECONDS)))
+                                .map(p -> String.format("%.1f:%.2f", p.percentile() * 100, p.value()))
                                 .collect(Collectors.joining(", ")));
         System.err.printf("partition.queue.exhaust: %.2f\n", exhausts.count());
         for (Timer timer : timers) {
@@ -134,8 +133,8 @@ public class DecatonRunner implements Runner {
                                                             p.value(TimeUnit.MILLISECONDS)))
                                     .collect(Collectors.joining(", ")));
         }
-        if (this.subscription != null) {
-            this.subscription.close();
+        if (subscription != null) {
+            subscription.close();
         }
     }
 }

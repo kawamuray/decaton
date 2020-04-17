@@ -18,6 +18,8 @@ package com.linecorp.decaton.processor.metrics;
 
 import java.time.Duration;
 
+import com.linecorp.decaton.processor.runtime.ConsumerSupplier;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Meter.Id;
@@ -70,7 +72,8 @@ public class Metrics {
                                    .description("Number of records returned by single Consumer#poll")
                                    .tags(availableTags.subscriptionScope())
                                    .distributionStatisticExpiry(Duration.ofSeconds(60))
-                                   .publishPercentiles(0.5, 0.9, 0.99, 0.999)
+                                   .publishPercentiles(0.01, 0.1, 0.25, 0.5, 0.75, 1.0)
+                                   .maximumExpectedValue(ConsumerSupplier.MAX_MAX_POLL_RECORDS * 2L)
                                    .register(registry);
     }
 
