@@ -32,6 +32,7 @@ public class Metrics {
     public static final String NAMESPACE = "decaton";
 
     private static final CompositeMeterRegistry registry = new CompositeMeterRegistry();
+
     static {
         registry.config().meterFilter(new MeterFilter() {
             @Override
@@ -50,11 +51,11 @@ public class Metrics {
     public class SubscriptionMetrics {
         private Timer processDuration(String scope) {
             return Timer.builder("subscription.process.durations")
-                 .description("Time waiting Consumer#poll to return")
-                 .tags(availableTags.subscriptionScope().and("scope", scope))
-                 .distributionStatisticExpiry(Duration.ofSeconds(60))
-                 .publishPercentiles(0.5, 0.9, 0.99, 0.999)
-                 .register(registry);
+                        .description("Time waiting Consumer#poll to return")
+                        .tags(availableTags.subscriptionScope().and("scope", scope))
+                        .distributionStatisticExpiry(Duration.ofSeconds(60))
+                        .publishPercentiles(0.5, 0.9, 0.99, 0.999)
+                        .register(registry);
         }
 
         public final Timer consumerPollTime = processDuration("poll");
@@ -75,6 +76,12 @@ public class Metrics {
                                    .publishPercentiles(0.0, 0.001, 0.01, 0.1, 0.5, 1.0)
                                    .maximumExpectedValue(ConsumerSupplier.MAX_MAX_POLL_RECORDS * 2L)
                                    .register(registry);
+
+        public final Counter smallRecords =
+                Counter.builder("subscription.poll.small.records")
+                       .description("Number of records returned by single Consumer#poll")
+                       .tags(availableTags.subscriptionScope())
+                       .register(registry);
     }
 
     public class TaskMetrics {

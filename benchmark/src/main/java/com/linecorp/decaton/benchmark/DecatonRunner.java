@@ -162,6 +162,10 @@ public class DecatonRunner implements Runner {
                           Arrays.stream(pollCount.takeSnapshot().percentileValues())
                                 .map(p -> String.format("%.1f:%.2f", p.percentile() * 100, p.value()))
                                 .collect(Collectors.joining(", ")));
+        Counter smallRecords = Metrics.registry().get("decaton.subscription.poll.small.records")
+                                               .tag("subscription", "decaton-benchmark")
+                                               .counter();
+        System.err.printf("subscription.poll.small.records: [%s]\n", smallRecords.count());
         System.err.printf("partition.queue.exhaust: %.2f\n", exhausts.count());
         for (Timer timer : timers) {
             System.err.printf("subscription.consumer.poll.time [%s] [%s]\n",

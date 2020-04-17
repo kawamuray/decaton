@@ -273,6 +273,9 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         int count = records.count();
         if (count > 0) {
             metrics.pollRecordsCount.record(count);
+            if (count < 50) {
+                metrics.smallRecords.increment();
+            }
         }
 
         timer = Utils.timer();
