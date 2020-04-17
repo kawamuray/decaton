@@ -72,7 +72,7 @@ public class Metrics {
                                    .description("Number of records returned by single Consumer#poll")
                                    .tags(availableTags.subscriptionScope())
                                    .distributionStatisticExpiry(Duration.ofSeconds(60))
-                                   .publishPercentiles(0.01, 0.1, 0.25, 0.5, 0.75, 1.0)
+                                   .publishPercentiles(0.0, 0.01, 0.1, 0.25, 0.5, 0.75, 1.0)
                                    .maximumExpectedValue(ConsumerSupplier.MAX_MAX_POLL_RECORDS * 2L)
                                    .register(registry);
     }
