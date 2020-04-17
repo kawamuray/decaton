@@ -128,7 +128,6 @@ public class DecatonRunner implements Runner {
             System.err.printf("subscription.consumer.poll.time [%s] [%s]\n",
                               timer.getId().getTag("scope"),
                               Arrays.stream(timer.takeSnapshot().percentileValues())
-                                    .filter(p -> p.percentile() > 0.8)
                                     .map(p -> String.format("%.1f:%.2f", p.percentile() * 100,
                                                             p.value(TimeUnit.MILLISECONDS)))
                                     .collect(Collectors.joining(", ")));
