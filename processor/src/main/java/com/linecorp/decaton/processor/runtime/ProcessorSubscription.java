@@ -110,7 +110,7 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
             return;
         }
         logger.debug("Committing offsets: {}", commitOffsets);
-        consumer.commitSync(commitOffsets);
+        consumer.commitAsync(commitOffsets, (offsets, exception) -> {});
         contexts.updateCommittedOffsets(commitOffsets);
     }
 
