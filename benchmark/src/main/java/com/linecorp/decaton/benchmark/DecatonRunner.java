@@ -51,6 +51,7 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.prometheus.PrometheusConfig;
 import io.micrometer.prometheus.PrometheusMeterRegistry;
+import lombok.Value;
 
 public class DecatonRunner implements Runner {
     private static final Map<String, Function<String, Object>> propertyConstructors =
@@ -188,8 +189,25 @@ public class DecatonRunner implements Runner {
 
         System.err.println("fetch duration = " + TimeUnit.NANOSECONDS.toMillis(ProcessorSubscription.lastFetchTime - ProcessorSubscription.firstFetchTime));
 
+        List<ThreadInfo> threads = new ArrayList<>();
+        for (long tid : ManagementFactory.getThreadMXBean().getAllThreadIds()) {
+            String name = ManagementFactory.getThreadMXBean().getThreadInfo(tid).getThreadName();
+            long cpuTime = ManagementFactory.getThreadMXBean().getThreadCpuTime(tid);
+            threads.add(new ThreadInfo(name, cpuTime));
+        }
+        threads.sort((o1, o2) -> (int) (o2.cpuTime - o1.cpuTime));
+        for (ThreadInfo thread : threads) {
+            System.err.printf("Thread %s consumed CPU %d\n", thread.name, TimeUnit.NANOSECONDS.toMillis(thread.cpuTime));
+        }
+
         if (subscription != null) {
             subscription.close();
         }
+    }
+
+    @Value
+    private static class ThreadInfo {
+        String name;
+        long cpuTime;
     }
 }
