@@ -24,6 +24,8 @@ import java.lang.ProcessBuilder.Redirect;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
@@ -52,15 +54,17 @@ public class ForkingExecution implements Execution {
 
     @Override
     public BenchmarkResult execute(Config config, Consumer<Stage> stageCallback) {
-        String[] cmd = {
-                javaBin().toString(),
-                "-server",
-                "-cp", currentClasspath(),
-                ForkingExecution.class.getName(),
-                serializeConfig(config),
-                };
+        List<String> cmd = new ArrayList<>();
+        cmd.add(javaBin().toString());
+        cmd.add("-server");
+        cmd.addAll(jvmFlags());
+        cmd.add("-cp"); cmd.add(currentClasspath());
+        cmd.add(ForkingExecution.class.getName());
+        cmd.add(serializeConfig(config));
+
         final Process process;
         try {
+            log.debug("Forking child process for run with: {}", cmd);
             process = new ProcessBuilder()
                     .command(cmd)
                     .redirectError(Redirect.INHERIT)
@@ -109,6 +113,10 @@ public class ForkingExecution implements Execution {
 
     private static String currentClasspath() {
         return ManagementFactory.getRuntimeMXBean().getClassPath();
+    }
+
+    private static List<String> jvmFlags() {
+        return ManagementFactory.getRuntimeMXBean().getInputArguments();
     }
 
     private static String serializeConfig(Config config) {
