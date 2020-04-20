@@ -21,5 +21,5 @@ if [[ "$*" == *--profile* ]] && [[ "$*" != *--profiler-bin* ]] && ! which profil
     extra_opts="$extra_opts --profiler-bin=$dir/profiler.sh"
 fi
 
-exec java -cp $(ls $(dirname $0)/build/libs/benchmark-*-shadow.jar | sort -nr | head -1) \
+exec java -XX:+UseG1GC -cp $(ls $(dirname $0)/build/libs/benchmark-*-shadow.jar | sort -nr | head -1) \
      com.linecorp.decaton.benchmark.Main $extra_opts "$@"
