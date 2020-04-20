@@ -31,6 +31,7 @@ import com.linecorp.decaton.benchmark.BenchmarkResult.Performance;
 import com.linecorp.decaton.benchmark.BenchmarkResult.ResourceUsage;
 import com.linecorp.decaton.benchmark.ResourceTracker.TrackingValues;
 import com.linecorp.decaton.benchmark.Task.KafkaDeserializer;
+import com.linecorp.decaton.processor.runtime.ProcessorSubscription;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -78,6 +79,7 @@ public class InProcessExecution implements Execution {
                 time = newTime;
             }
             Thread.sleep(3000);
+            ProcessorSubscription.firstFetchTime = -1;
 
             JvmTracker jvmTracker = JvmTracker.create();
             stageCallback.accept(Stage.READY);

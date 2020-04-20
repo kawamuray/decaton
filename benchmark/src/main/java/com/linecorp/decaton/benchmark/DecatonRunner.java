@@ -185,6 +185,9 @@ public class DecatonRunner implements Runner {
                                                             p.value(TimeUnit.MILLISECONDS)))
                                     .collect(Collectors.joining(", ")));
         }
+
+        System.err.println("fetch duration = " + TimeUnit.NANOSECONDS.toMillis(ProcessorSubscription.lastFetchTime - ProcessorSubscription.firstFetchTime));
+
         if (subscription != null) {
             subscription.close();
         }

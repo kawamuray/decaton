@@ -266,12 +266,19 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         }
     }
 
+    public static volatile long firstFetchTime = -1;
+    public static volatile long lastFetchTime = -1;
+
     private void pollOnce(Consumer<String, byte[]> consumer) {
         Timer timer = Utils.timer();
         ConsumerRecords<String, byte[]> records = consumer.poll(POLL_TIMEOUT_MILLIS);
         metrics.consumerPollTime.record(timer.duration());
         int count = records.count();
         if (count > 0) {
+            if (firstFetchTime < 0) {
+                firstFetchTime = System.nanoTime();
+            }
+            lastFetchTime = System.nanoTime();
             metrics.pollRecordsCount.record(count);
             if (count < 50) {
                 metrics.smallRecords.increment();
