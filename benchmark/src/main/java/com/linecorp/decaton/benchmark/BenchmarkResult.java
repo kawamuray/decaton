@@ -158,7 +158,7 @@ public class BenchmarkResult {
         pw.printf("--- JVM ---\n");
         jvmStats.gcStats.keySet().stream().sorted().forEach(name -> {
             GcStats values = jvmStats.gcStats.get(name);
-            pw.printf("GC (%s) Count(ms): %d\n", name, values.count);
+            pw.printf("GC (%s) Count: %d\n", name, values.count);
             pw.printf("GC (%s) Time(ms): %d\n", name, values.time);
         });
 
