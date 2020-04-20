@@ -16,6 +16,7 @@
 
 package com.linecorp.decaton.benchmark;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -149,6 +150,8 @@ public class DecatonRunner implements Runner {
 
     @Override
     public void close() throws Exception {
+        System.err.println("Total threads = " + ManagementFactory.getThreadMXBean().getThreadCount());
+
         Collection<Timer> timers = Metrics.registry().get("decaton.subscription.process.durations")
                                           .tag("subscription", "decaton-benchmark")
                                           .timers();
