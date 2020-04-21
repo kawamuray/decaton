@@ -71,6 +71,12 @@ public class DecatonRunner implements Runner {
             if (metric.metricName().name().startsWith("commit-latency-")) {
                 metrics.add(metric);
             }
+            if (metric.metricName().name().startsWith("fetch-latency-")) {
+                metrics.add(metric);
+            }
+            if (metric.metricName().name().startsWith("fetch-rate")) {
+                metrics.add(metric);
+            }
         }
 
         @Override
