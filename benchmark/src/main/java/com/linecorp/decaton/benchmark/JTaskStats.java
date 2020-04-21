@@ -16,6 +16,10 @@
 
 package com.linecorp.decaton.benchmark;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.ProcessBuilder.Redirect;
+
 import sun.jvm.hotspot.oops.OopUtilities;
 import sun.jvm.hotspot.runtime.JavaThread;
 import sun.jvm.hotspot.runtime.Threads;
@@ -34,7 +38,16 @@ public class JTaskStats extends Tool {
             long tid = OopUtilities.threadOopGetTID(th.getThreadObj());
             long nid = th.getOSThread().threadId();
             String name = th.getThreadName();
-            System.err.printf("ThreadMap %d(%s) = %d\n", tid, name, nid);
+            System.err.printf("Thread %d(%s) nid=%d\n", tid, name, nid);
+            try {
+                new ProcessBuilder("./getdelays", "-d", "-p", String.valueOf(nid))
+                        .redirectOutput(new File("/dev/stderr"))
+                        .redirectError(Redirect.INHERIT)
+                        .start()
+                        .waitFor();
+            } catch (InterruptedException | IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 

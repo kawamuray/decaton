@@ -16,6 +16,8 @@
 
 package com.linecorp.decaton.benchmark;
 
+import java.io.File;
+import java.lang.ProcessBuilder.Redirect;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -211,7 +213,11 @@ public class DecatonRunner implements Runner {
         String pid = ManagementFactory.getRuntimeMXBean().getName().split("@", 2)[0];
         try {
             new ProcessBuilder("java", "-cp", ManagementFactory.getRuntimeMXBean().getClassPath(),
-                               JTaskStats.class.getName(), pid).inheritIO().start().waitFor();
+                               JTaskStats.class.getName(), pid)
+                    .redirectOutput(new File("/dev/stderr"))
+                    .redirectError(Redirect.INHERIT)
+                    .start()
+                    .waitFor();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
