@@ -193,11 +193,12 @@ public class DecatonRunner implements Runner {
         for (long tid : ManagementFactory.getThreadMXBean().getAllThreadIds()) {
             String name = ManagementFactory.getThreadMXBean().getThreadInfo(tid).getThreadName();
             long cpuTime = ManagementFactory.getThreadMXBean().getThreadCpuTime(tid);
-            threads.add(new ThreadInfo(name, cpuTime));
+            threads.add(new ThreadInfo(tid, name, cpuTime));
         }
         threads.sort((o1, o2) -> (int) (o2.cpuTime - o1.cpuTime));
         for (ThreadInfo thread : threads) {
-            System.err.printf("Thread %s consumed CPU %d\n", thread.name, TimeUnit.NANOSECONDS.toMillis(thread.cpuTime));
+            System.err.printf("Thread %d/%s consumed CPU %d\n",
+                              thread.tid, thread.name, TimeUnit.NANOSECONDS.toMillis(thread.cpuTime));
         }
 
         if (subscription != null) {
@@ -207,6 +208,7 @@ public class DecatonRunner implements Runner {
 
     @Value
     private static class ThreadInfo {
+        long tid;
         String name;
         long cpuTime;
     }

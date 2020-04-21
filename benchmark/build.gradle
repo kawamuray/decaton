@@ -19,7 +19,7 @@ dependencies {
 
     implementation 'io.micrometer:micrometer-registry-prometheus:latest.release'
 
-
+    implementation files(System.getenv("JAVA_HOME") + "/lib/sa-jdi.jar")
 
     runtimeOnly "ch.qos.logback:logback-classic:1.2.3"
 }
