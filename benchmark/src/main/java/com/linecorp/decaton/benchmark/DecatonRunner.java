@@ -200,9 +200,24 @@ public class DecatonRunner implements Runner {
             System.err.printf("Thread %d/%s consumed CPU %d\n",
                               thread.tid, thread.name, TimeUnit.NANOSECONDS.toMillis(thread.cpuTime));
         }
+        hoge();
 
         if (subscription != null) {
             subscription.close();
+        }
+    }
+
+    private static void hoge() {
+        String pid = ManagementFactory.getRuntimeMXBean().getName().split("@", 2)[0];
+        try {
+            Process proc = Runtime.getRuntime().exec(new String[] {
+                    "java", "-cp", ManagementFactory.getRuntimeMXBean().getClassPath(),
+                    JTaskStats.class.getName(), pid
+            });
+            proc.waitFor();
+            System.err.println("err: " + Profiling.readAllOut(proc.getErrorStream()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

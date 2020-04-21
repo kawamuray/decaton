@@ -81,7 +81,7 @@ public class Profiling {
         }
     }
 
-    private static String readAllOut(InputStream errorStream) {
+    static String readAllOut(InputStream errorStream) {
         StringBuilder out = new StringBuilder();
         BufferedReader bf = new BufferedReader(new InputStreamReader(errorStream));
         String line;
