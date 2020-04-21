@@ -210,12 +210,8 @@ public class DecatonRunner implements Runner {
     private static void hoge() {
         String pid = ManagementFactory.getRuntimeMXBean().getName().split("@", 2)[0];
         try {
-            Process proc = Runtime.getRuntime().exec(new String[] {
-                    "java", "-cp", ManagementFactory.getRuntimeMXBean().getClassPath(),
-                    JTaskStats.class.getName(), pid
-            });
-            proc.waitFor();
-            System.err.println("err: " + Profiling.readAllOut(proc.getErrorStream()));
+            new ProcessBuilder("java", "-cp", ManagementFactory.getRuntimeMXBean().getClassPath(),
+                               JTaskStats.class.getName(), pid).inheritIO().start().waitFor();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
