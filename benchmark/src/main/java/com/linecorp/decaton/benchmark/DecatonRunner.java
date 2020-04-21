@@ -77,6 +77,9 @@ public class DecatonRunner implements Runner {
             if (metric.metricName().name().startsWith("fetch-rate")) {
                 metrics.add(metric);
             }
+            if (metric.metricName().name().startsWith("fetch-total")) {
+                metrics.add(metric);
+            }
         }
 
         @Override
