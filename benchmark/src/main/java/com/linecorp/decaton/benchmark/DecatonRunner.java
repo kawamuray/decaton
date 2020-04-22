@@ -80,6 +80,9 @@ public class DecatonRunner implements Runner {
             if (metric.metricName().name().startsWith("fetch-total")) {
                 metrics.add(metric);
             }
+            if (metric.metricName().name().startsWith("select-")) {
+                metrics.add(metric);
+            }
         }
 
         @Override
