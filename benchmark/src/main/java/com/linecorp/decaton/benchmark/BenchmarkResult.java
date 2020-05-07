@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import com.linecorp.decaton.benchmark.BenchmarkResult.JvmStats.GcStats;
+import com.linecorp.decaton.benchmark.BenchmarkResult.JvmStats;
 
 import lombok.Value;
 import lombok.experimental.Accessors;
@@ -91,6 +91,7 @@ public class BenchmarkResult {
     }
 
     // TODO: WTF? using @Value here causes compilation error
+    @Value
     public static class JvmStats {
         @Value
         public static class GcStats {
@@ -155,7 +156,7 @@ public class BenchmarkResult {
 
         pw.printf("--- JVM ---\n");
         jvmStats.gcStats.keySet().stream().sorted().forEach(name -> {
-            GcStats values = jvmStats.gcStats.get(name);
+            JvmStats.GcStats values = jvmStats.gcStats.get(name);
             pw.printf("GC (%s) Count: %d\n", name, values.count);
             pw.printf("GC (%s) Time(ms): %d\n", name, values.time);
         });
