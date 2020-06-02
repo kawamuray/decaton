@@ -63,7 +63,8 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--param", description = "Key-value parameters to supply for runner")
     private Map<String, String> params = new HashMap<>();
 
-    @Option(names = "--no-wait-jit", description = "Do not await JIT compilation to get stable before moving onto actual run")
+    @Option(names = "--no-wait-jit",
+            description = "Do not await JIT compilation to get stable before moving onto actual run")
     private boolean skipWaitingJIT;
 
     @Option(names = "--profile", description = "Enable profiling of execution with async-profiler")
@@ -75,6 +76,10 @@ public final class Main implements Callable<Integer> {
 
     @Option(names = "--profiler-opts", description = "Options to pass for async-profiler's profiler.sh")
     private String profilerOpts;
+
+    @Option(names = "--format", description = "Result format, one of: text(default), json",
+            defaultValue = "text")
+    private String resultFormat;
 
     private static List<String> parseOptions(String opts) {
         if (opts == null) {
@@ -89,12 +94,24 @@ public final class Main implements Callable<Integer> {
         return items;
     }
 
+    private ResultFormat resultFormat() {
+        switch (resultFormat) {
+            case "text":
+                return new TextResultFormat();
+            case "json":
+                return new JsonResultFormat();
+            default:
+                throw new IllegalArgumentException("unknown format: " + resultFormat);
+        }
+    }
+
     @Override
     public Integer call() throws Exception {
         BenchmarkConfig.ProfilingConfig profiling = null;
         if (enableProfiling) {
             profiling = new ProfilingConfig(profilerBin, parseOptions(profilerOpts));
         }
+        ResultFormat resultFormat = resultFormat();
         BenchmarkConfig config =
                 BenchmarkConfig.builder()
                                .title(title)
@@ -110,7 +127,7 @@ public final class Main implements Callable<Integer> {
                                .build();
         Benchmark benchmark = new Benchmark(config);
         BenchmarkResult result = benchmark.run();
-        result.print(config, System.out);
+        resultFormat.print(config, System.out, result);
         return 0;
     }
 
