@@ -81,6 +81,10 @@ public final class Main implements Callable<Integer> {
             defaultValue = "text")
     private String resultFormat;
 
+    @Option(names = "--file-name-only",
+            description = "Trim file paths in result from its path to filename only")
+    private boolean fileNameOnly;
+
     private static List<String> parseOptions(String opts) {
         if (opts == null) {
             return emptyList();
@@ -124,6 +128,7 @@ public final class Main implements Callable<Integer> {
                                .skipWaitingJIT(skipWaitingJIT)
                                .profiling(profiling)
                                .forking(true)
+                               .fileNameOnly(fileNameOnly)
                                .build();
         Benchmark benchmark = new Benchmark(config);
         BenchmarkResult result = benchmark.run();

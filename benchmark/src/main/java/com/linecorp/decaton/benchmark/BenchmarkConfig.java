@@ -70,6 +70,10 @@ public class BenchmarkConfig {
      * Whether to run benchmark in forked JVM or within the same JVM.
      */
     boolean forking;
+    /**
+     * Trim file paths in result from its path to filename only.
+     */
+    boolean fileNameOnly;
 
     @Value
     public static class ProfilingConfig {

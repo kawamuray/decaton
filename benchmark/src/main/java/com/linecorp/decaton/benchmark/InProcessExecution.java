@@ -91,7 +91,7 @@ public class InProcessExecution implements Execution {
         }
 
         stageCallback.accept(Stage.FINISH);
-        return assembleResult(recording, resourceUsageReport, jvmReport, profilerOutput);
+        return assembleResult(bmConfig, recording, resourceUsageReport, jvmReport, profilerOutput);
     }
 
     private static Profiling profiling(BenchmarkConfig bmConfig) {
@@ -118,7 +118,8 @@ public class InProcessExecution implements Execution {
         }
     }
 
-    private static BenchmarkResult assembleResult(Recording recording,
+    private static BenchmarkResult assembleResult(BenchmarkConfig bmConfig,
+                                                  Recording recording,
                                                   Map<Long, TrackingValues> resourceUsageReport,
                                                   Map<String, GcStats> jvmReport,
                                                   Optional<Path> profilerOutput) {
@@ -137,6 +138,10 @@ public class InProcessExecution implements Execution {
                 Entry::getKey,
                 e -> new JvmStats.GcStats(e.getValue().count(), e.getValue().time())));
         JvmStats jvmStats = new JvmStats(gcStats);
+
+        if (bmConfig.fileNameOnly()) {
+            profilerOutput = profilerOutput.map(Path::getFileName);
+        }
         return new BenchmarkResult(performance, resource, jvmStats, new ExtraInfo(profilerOutput.map(String::valueOf).orElse(null)));
     }
 }
