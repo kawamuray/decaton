@@ -1,6 +1,0 @@
-Spring Integration
-==================
-:base_version: 0.0.33
-:modules:
-
-TBC

@@ -1,8 +1,0 @@
-.idea/*
-!.idea/copyright
-.gradle
-build
-*.iml
-
-# generated files by IDE
-out/

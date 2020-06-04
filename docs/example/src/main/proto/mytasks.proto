@@ -1,7 +1,0 @@
-syntax = "proto3";
-package com.linecorp.decaton.example.protocol;
-
-message PrintMessageTask {
-    string name = 1;
-    int32 age = 2;
-}

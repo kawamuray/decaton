@@ -1,8 +1,0 @@
-dependencies {
-    compile project(":protocol")
-    compile project(":common")
-
-    compile "org.apache.kafka:kafka-clients:$kafkaVersion"
-
-    testCompile project(":protobuf")
-}
