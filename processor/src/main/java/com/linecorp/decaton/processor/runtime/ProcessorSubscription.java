@@ -317,7 +317,7 @@ public class ProcessorSubscription extends Thread implements AsyncShutdownable {
         if (System.currentTimeMillis() - lastCommittedMillis >= commitIntervalMillis.value()) {
             try {
                 commitCompletedOffsets(consumer);
-                Thread.sleep(500);
+                Thread.sleep(3000);
             } catch (CommitFailedException | TimeoutException | InterruptedException e) {
                 logger.warn("Offset commit failed, but continuing to consume", e);
                 // Continue processing, assuming commit will be handled successfully in next attempt.
