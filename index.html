@@ -1,11 +1,61 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <title>Commits Loupe</title>
+    <meta charset="utf-8"/>
+    <title>Decaton Performance Tracking</title>
   </head>
   <body>
-    <script src="/decaton/commits-loupe/commits-loupe.js"></script>
-    <div id="screen"></div>
+    <h1>Decaton Performance Tracking</h1>
+    <div id="loupe-screen"></div>
+    <script src="https://cdn.jsdelivr.net/gh/kawamuray/commits-loupe/dist/commits-loupe.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/kawamuray/commits-loupe/dist/commits-loupe-style.js"></script>
+    <script>
+      commitsLoupe.ready(cloupe => {
+          cloupe.create({
+              on: "#loupe-screen",
+              repo: "kawamuray/decaton",
+              branch: "bmt-revise",
+              data_url: "https://kawamuray.github.io/decaton/commit-data",
+              components: {
+                  show_table: true,
+                  show_range: false,
+              },
+              data: [
+                  {
+                      title: "Throughput / 0ms latency",
+                      file: "tasks_100k_latency_0ms_concurrency_20-benchmark.json",
+                      query: "performance.throughput",
+                  },
+                  {
+                      title: "Execution Time / 10ms latency",
+                      file: "tasks_100k_latency_0ms_concurrency_20-benchmark.json",
+                      query: "performance.executionTime",
+                  },
+                  {
+                      title: "Max delivery latency / 0ms latency",
+                      file: "tasks_100k_latency_0ms_concurrency_20-benchmark.json",
+                      query: "performance.deliveryLatency.max",
+                  },
+                  {
+                      title: "Throughput / 10ms latency",
+                      file: "tasks_10k_latency_10ms_concurrency_20-benchmark.json",
+                      query: "performance.throughput",
+                  },
+                  {
+                      title: "Execution Time / 10ms latency",
+                      file: "tasks_10k_latency_10ms_concurrency_20-benchmark.json",
+                      query: "performance.executionTime",
+                  },
+                  {
+                      title: "Max delivery latency / 10ms latency",
+                      file: "tasks_10k_latency_10ms_concurrency_20-benchmark.json",
+                      query: "performance.deliveryLatency.max",
+                  },
+              ],
+          });
+
+          commitsLoupeStyle.initStyle();
+      });
+    </script>
   </body>
 </html>
