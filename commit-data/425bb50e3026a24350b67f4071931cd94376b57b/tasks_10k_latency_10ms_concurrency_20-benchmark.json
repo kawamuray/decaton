@@ -1,23 +1,23 @@
 {
   "performance" : {
     "totalTasks" : 10000,
-    "executionTime" : 1819000000,
-    "throughput" : 5499.12028623825,
+    "executionTime" : 2035666666,
+    "throughput" : 4922.20038897846,
     "deliveryLatency" : {
-      "avg" : 836000000,
-      "max" : 1778666666
+      "avg" : 862333333,
+      "max" : 1993666666
     }
   },
   "resource" : {
     "threads" : 61,
-    "totalCpuTimeNs" : 5538042572,
-    "totalAllocatedBytes" : 496778435
+    "totalCpuTimeNs" : 5273233706,
+    "totalAllocatedBytes" : 490388910
   },
   "jvmStats" : {
     "gcStats" : {
       "G1 Young Generation" : {
         "count" : 0,
-        "time" : 9
+        "time" : 3
       },
       "G1 Old Generation" : {
         "count" : 0,

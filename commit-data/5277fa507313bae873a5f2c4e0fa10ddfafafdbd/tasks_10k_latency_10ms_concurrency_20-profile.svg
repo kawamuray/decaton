@@ -1,0 +1,2373 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="2102" onload="init(evt)" viewBox="0 0 1200 2102" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom();
+			zoom(target);
+		}
+		else if (e.target.id == "unzoom") unzoom();
+		else if (e.target.id == "search") search_prompt();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	}, false)
+
+	// functions
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+		return;
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x = txt.length - 2; x > 0; x--) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0" y="0" width="100%" height="100%" fill="rgb(240,240,220)"/>
+<text id="title" x="600" y="24">Flame Graph</text>
+<text id="details" x="10" y="2085"> </text>
+<text id="unzoom" x="10" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1090" y="24">Search</text>
+<text id="matched" x="1090" y="2085"> </text>
+<g id="frames">
+<g>
+<title>all (143 samples, 100.00%)</title><rect x="10.0" y="2051.0" width="1180.0" height="15" fill="#fa7b7b" rx="2" ry="2"/>
+<text x="13.0" y="2062.0">all</text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="2035.0" width="8.3" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="13.0" y="2046.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="2019.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="13.0" y="2030.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="2003.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="13.0" y="2014.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1987.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="1998.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1971.0" width="8.3" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="13.0" y="1982.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1955.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="13.0" y="1966.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1939.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="13.0" y="1950.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1923.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="1934.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1907.0" width="8.3" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="13.0" y="1918.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1891.0" width="8.3" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="13.0" y="1902.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1875.0" width="8.3" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="13.0" y="1886.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1859.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="13.0" y="1870.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1843.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="1854.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1827.0" width="8.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="13.0" y="1838.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1811.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="1822.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1795.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="13.0" y="1806.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1779.0" width="8.3" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="13.0" y="1790.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1763.0" width="8.3" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="13.0" y="1774.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1747.0" width="8.3" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="13.0" y="1758.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1731.0" width="8.3" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="13.0" y="1742.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1715.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="13.0" y="1726.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1699.0" width="8.3" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="13.0" y="1710.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1683.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="13.0" y="1694.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1667.0" width="8.3" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="13.0" y="1678.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1651.0" width="8.3" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="13.0" y="1662.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1635.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="13.0" y="1646.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1619.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="13.0" y="1630.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1603.0" width="8.3" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="13.0" y="1614.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1587.0" width="8.3" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="13.0" y="1598.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1571.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="1582.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1555.0" width="8.3" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="13.0" y="1566.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1539.0" width="8.3" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="13.0" y="1550.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1523.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="1534.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1507.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="13.0" y="1518.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1491.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="1502.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1475.0" width="8.3" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="13.0" y="1486.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1459.0" width="8.3" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="13.0" y="1470.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1443.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="1454.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1427.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="13.0" y="1438.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1411.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="1422.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1395.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="13.0" y="1406.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1379.0" width="8.3" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="13.0" y="1390.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1363.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="13.0" y="1374.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1347.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="1358.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1331.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="13.0" y="1342.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1315.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="13.0" y="1326.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1299.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="1310.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1283.0" width="8.3" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="13.0" y="1294.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1267.0" width="8.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="13.0" y="1278.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1251.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="1262.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1235.0" width="8.3" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="13.0" y="1246.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1219.0" width="8.3" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="13.0" y="1230.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1203.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="13.0" y="1214.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1187.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="13.0" y="1198.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1171.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="13.0" y="1182.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1155.0" width="8.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="13.0" y="1166.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1139.0" width="8.3" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="13.0" y="1150.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1123.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="13.0" y="1134.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1107.0" width="8.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="13.0" y="1118.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1091.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="13.0" y="1102.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1075.0" width="8.3" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="13.0" y="1086.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1059.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="1070.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1043.0" width="8.3" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="13.0" y="1054.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1027.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="13.0" y="1038.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="1011.0" width="8.3" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="13.0" y="1022.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="995.0" width="8.3" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="13.0" y="1006.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="979.0" width="8.3" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="13.0" y="990.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="963.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="974.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="947.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="13.0" y="958.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="931.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="13.0" y="942.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="915.0" width="8.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="13.0" y="926.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="899.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="13.0" y="910.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="883.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="894.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="867.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="878.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="851.0" width="8.3" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="13.0" y="862.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="835.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="846.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="819.0" width="8.3" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="13.0" y="830.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="803.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="13.0" y="814.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="787.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="13.0" y="798.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="771.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="13.0" y="782.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="755.0" width="8.3" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="13.0" y="766.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="739.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="13.0" y="750.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="723.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="13.0" y="734.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="707.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="13.0" y="718.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="691.0" width="8.3" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="13.0" y="702.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="675.0" width="8.3" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="13.0" y="686.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="659.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="13.0" y="670.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="643.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="13.0" y="654.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="627.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="13.0" y="638.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="611.0" width="8.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="13.0" y="622.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="595.0" width="8.3" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="13.0" y="606.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="579.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="13.0" y="590.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="563.0" width="8.3" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="13.0" y="574.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="547.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="13.0" y="558.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="531.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="542.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="515.0" width="8.3" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="13.0" y="526.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="499.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="13.0" y="510.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="483.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="13.0" y="494.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="467.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="478.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="451.0" width="8.3" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="13.0" y="462.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="435.0" width="8.3" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="13.0" y="446.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="419.0" width="8.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="13.0" y="430.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="403.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="414.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="387.0" width="8.3" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="13.0" y="398.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="371.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="13.0" y="382.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="355.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="13.0" y="366.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="339.0" width="8.3" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="13.0" y="350.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="323.0" width="8.3" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="13.0" y="334.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="307.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="318.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="291.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="13.0" y="302.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="275.0" width="8.3" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="13.0" y="286.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="259.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="13.0" y="270.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="243.0" width="8.3" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="13.0" y="254.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="227.0" width="8.3" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="13.0" y="238.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="211.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="13.0" y="222.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="195.0" width="8.3" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="13.0" y="206.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="179.0" width="8.3" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="13.0" y="190.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="163.0" width="8.3" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="13.0" y="174.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="147.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="13.0" y="158.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="131.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="13.0" y="142.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="115.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="13.0" y="126.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="99.0" width="8.3" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="13.0" y="110.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="83.0" width="8.3" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="13.0" y="94.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::create_split_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;, bool&amp;) (1 samples, 0.70%)</title><rect x="10.0" y="67.0" width="8.3" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="13.0" y="78.0"></text>
+</g>
+<g>
+<title>Compile::find_alias_type(TypePtr const*, bool, ciField*) [clone .part.334] (1 samples, 0.70%)</title><rect x="10.0" y="51.0" width="8.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="13.0" y="62.0"></text>
+</g>
+<g>
+<title>Compile::flatten_alias_type(TypePtr const*) const (1 samples, 0.70%)</title><rect x="10.0" y="35.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="13.0" y="46.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription.run (5 samples, 3.50%)</title><rect x="18.3" y="2035.0" width="41.2" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="21.3" y="2046.0">com..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription.pollOnce (5 samples, 3.50%)</title><rect x="18.3" y="2019.0" width="41.2" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="21.3" y="2030.0">com..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/PartitionContexts.updateHighWatermarks (1 samples, 0.70%)</title><rect x="18.3" y="2003.0" width="8.2" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="21.3" y="2014.0"></text>
+</g>
+<g>
+<title>java/util/HashMap$Values.forEach (1 samples, 0.70%)</title><rect x="18.3" y="1987.0" width="8.2" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="21.3" y="1998.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/PartitionContexts$$Lambda$263/797361107.accept (1 samples, 0.70%)</title><rect x="18.3" y="1971.0" width="8.2" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="21.3" y="1982.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/PartitionContext.updateHighWatermark (1 samples, 0.70%)</title><rect x="18.3" y="1955.0" width="8.2" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="21.3" y="1966.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/OutOfOrderCommitControl.updateHighWatermark (1 samples, 0.70%)</title><rect x="18.3" y="1939.0" width="8.2" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="21.3" y="1950.0"></text>
+</g>
+<g>
+<title>java/lang/Iterable.forEach (1 samples, 0.70%)</title><rect x="26.5" y="2003.0" width="8.3" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="29.5" y="2014.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription$$Lambda$262/381309246.accept (1 samples, 0.70%)</title><rect x="26.5" y="1987.0" width="8.3" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="29.5" y="1998.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription.lambda$pollOnce$0 (1 samples, 0.70%)</title><rect x="26.5" y="1971.0" width="8.3" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="29.5" y="1982.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/TaskRequest.&lt;init&gt; (1 samples, 0.70%)</title><rect x="26.5" y="1955.0" width="8.3" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="29.5" y="1966.0"></text>
+</g>
+<g>
+<title>java/lang/StringBuilder.append (1 samples, 0.70%)</title><rect x="26.5" y="1939.0" width="8.3" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="29.5" y="1950.0"></text>
+</g>
+<g>
+<title>java/lang/AbstractStringBuilder.append (1 samples, 0.70%)</title><rect x="26.5" y="1923.0" width="8.3" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="29.5" y="1934.0"></text>
+</g>
+<g>
+<title>java/lang/AbstractStringBuilder.ensureCapacityInternal (1 samples, 0.70%)</title><rect x="26.5" y="1907.0" width="8.3" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="29.5" y="1918.0"></text>
+</g>
+<g>
+<title>java/util/Arrays.copyOf (1 samples, 0.70%)</title><rect x="26.5" y="1891.0" width="8.3" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="29.5" y="1902.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.poll (3 samples, 2.10%)</title><rect x="34.8" y="2003.0" width="24.7" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="37.8" y="2014.0">o..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.poll (3 samples, 2.10%)</title><rect x="34.8" y="1987.0" width="24.7" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="37.8" y="1998.0">o..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.pollForFetches (3 samples, 2.10%)</title><rect x="34.8" y="1971.0" width="24.7" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="37.8" y="1982.0">o..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/ConsumerNetworkClient.poll (1 samples, 0.70%)</title><rect x="34.8" y="1955.0" width="8.2" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="37.8" y="1966.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/ConsumerNetworkClient.poll (1 samples, 0.70%)</title><rect x="34.8" y="1939.0" width="8.2" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="37.8" y="1950.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/NetworkClient.poll (1 samples, 0.70%)</title><rect x="34.8" y="1923.0" width="8.2" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="37.8" y="1934.0"></text>
+</g>
+<g>
+<title>Runtime1::counter_overflow(JavaThread*, int, Method*) (1 samples, 0.70%)</title><rect x="34.8" y="1907.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="37.8" y="1918.0"></text>
+</g>
+<g>
+<title>SimpleThresholdPolicy::event(methodHandle, methodHandle, int, int, CompLevel, nmethod*, JavaThread*) (1 samples, 0.70%)</title><rect x="34.8" y="1891.0" width="8.2" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="37.8" y="1902.0"></text>
+</g>
+<g>
+<title>AdvancedThresholdPolicy::method_invocation_event(methodHandle, methodHandle, CompLevel, nmethod*, JavaThread*) (1 samples, 0.70%)</title><rect x="34.8" y="1875.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="37.8" y="1886.0"></text>
+</g>
+<g>
+<title>SimpleThresholdPolicy::compile(methodHandle, int, CompLevel, JavaThread*) [clone .part.149] (1 samples, 0.70%)</title><rect x="34.8" y="1859.0" width="8.2" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="37.8" y="1870.0"></text>
+</g>
+<g>
+<title>AdvancedThresholdPolicy::submit_compile(methodHandle, int, CompLevel, JavaThread*) (1 samples, 0.70%)</title><rect x="34.8" y="1843.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="37.8" y="1854.0"></text>
+</g>
+<g>
+<title>CompileBroker::compile_method(methodHandle, int, int, methodHandle, int, char const*, Thread*) (1 samples, 0.70%)</title><rect x="34.8" y="1827.0" width="8.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="37.8" y="1838.0"></text>
+</g>
+<g>
+<title>CompileBroker::compile_method_base(methodHandle, int, int, methodHandle, int, char const*, Thread*) (1 samples, 0.70%)</title><rect x="34.8" y="1811.0" width="8.2" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="37.8" y="1822.0"></text>
+</g>
+<g>
+<title>CompileBroker::create_compile_task(CompileQueue*, int, methodHandle, int, int, methodHandle, int, char const*, bool) (1 samples, 0.70%)</title><rect x="34.8" y="1795.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="37.8" y="1806.0"></text>
+</g>
+<g>
+<title>CompileTask::initialize(int, methodHandle, int, int, methodHandle, int, char const*, bool) (1 samples, 0.70%)</title><rect x="34.8" y="1779.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="37.8" y="1790.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.fetchedRecords (1 samples, 0.70%)</title><rect x="43.0" y="1955.0" width="8.3" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="46.0" y="1966.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/SubscriptionState.isPaused (1 samples, 0.70%)</title><rect x="43.0" y="1939.0" width="8.3" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="46.0" y="1950.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/SubscriptionState$TopicPartitionState.access$2200 (1 samples, 0.70%)</title><rect x="43.0" y="1923.0" width="8.3" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="46.0" y="1934.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.sendFetches (1 samples, 0.70%)</title><rect x="51.3" y="1955.0" width="8.2" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="54.3" y="1966.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.prepareFetchRequests (1 samples, 0.70%)</title><rect x="51.3" y="1939.0" width="8.2" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="54.3" y="1950.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.fetchablePartitions (1 samples, 0.70%)</title><rect x="51.3" y="1923.0" width="8.2" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="54.3" y="1934.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/SubscriptionState.fetchablePartitions (1 samples, 0.70%)</title><rect x="51.3" y="1907.0" width="8.2" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="54.3" y="1918.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReferencePipeline.collect (1 samples, 0.70%)</title><rect x="51.3" y="1891.0" width="8.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="54.3" y="1902.0"></text>
+</g>
+<g>
+<title>java/util/stream/AbstractPipeline.evaluate (1 samples, 0.70%)</title><rect x="51.3" y="1875.0" width="8.2" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="54.3" y="1886.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReduceOps$ReduceOp.evaluateSequential (1 samples, 0.70%)</title><rect x="51.3" y="1859.0" width="8.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="54.3" y="1870.0"></text>
+</g>
+<g>
+<title>java/util/stream/AbstractPipeline.wrapAndCopyInto (1 samples, 0.70%)</title><rect x="51.3" y="1843.0" width="8.2" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="54.3" y="1854.0"></text>
+</g>
+<g>
+<title>java/util/stream/AbstractPipeline.copyInto (1 samples, 0.70%)</title><rect x="51.3" y="1827.0" width="8.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="54.3" y="1838.0"></text>
+</g>
+<g>
+<title>java/util/Spliterators$IteratorSpliterator.forEachRemaining (1 samples, 0.70%)</title><rect x="51.3" y="1811.0" width="8.2" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="54.3" y="1822.0"></text>
+</g>
+<g>
+<title>java/util/Iterator.forEachRemaining (1 samples, 0.70%)</title><rect x="51.3" y="1795.0" width="8.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="54.3" y="1806.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReferencePipeline$3$1.accept (1 samples, 0.70%)</title><rect x="51.3" y="1779.0" width="8.2" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="54.3" y="1790.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReferencePipeline$2$1.accept (1 samples, 0.70%)</title><rect x="51.3" y="1763.0" width="8.2" height="15" fill="#50e150" rx="2" ry="2"/>
+<text x="54.3" y="1774.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReferencePipeline$3$1.accept (1 samples, 0.70%)</title><rect x="51.3" y="1747.0" width="8.2" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="54.3" y="1758.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReduceOps$3ReducingSink.accept (1 samples, 0.70%)</title><rect x="51.3" y="1731.0" width="8.2" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="54.3" y="1742.0"></text>
+</g>
+<g>
+<title>java/util/stream/Collectors$$Lambda$182/1037468230.accept (1 samples, 0.70%)</title><rect x="51.3" y="1715.0" width="8.2" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="54.3" y="1726.0"></text>
+</g>
+<g>
+<title>java/util/ArrayList.add (1 samples, 0.70%)</title><rect x="51.3" y="1699.0" width="8.2" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="54.3" y="1710.0"></text>
+</g>
+<g>
+<title>java/util/ArrayList.ensureCapacityInternal (1 samples, 0.70%)</title><rect x="51.3" y="1683.0" width="8.2" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="54.3" y="1694.0"></text>
+</g>
+<g>
+<title>java/util/ArrayList.ensureExplicitCapacity (1 samples, 0.70%)</title><rect x="51.3" y="1667.0" width="8.2" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="54.3" y="1678.0"></text>
+</g>
+<g>
+<title>java/util/ArrayList.grow (1 samples, 0.70%)</title><rect x="51.3" y="1651.0" width="8.2" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="54.3" y="1662.0"></text>
+</g>
+<g>
+<title>java/util/Arrays.copyOf (1 samples, 0.70%)</title><rect x="51.3" y="1635.0" width="8.2" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="54.3" y="1646.0"></text>
+</g>
+<g>
+<title>java/lang/Thread.run (9 samples, 6.29%)</title><rect x="59.5" y="2035.0" width="74.3" height="15" fill="#60f160" rx="2" ry="2"/>
+<text x="62.5" y="2046.0">java/lan..</text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.run (9 samples, 6.29%)</title><rect x="59.5" y="2019.0" width="74.3" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="62.5" y="2030.0">java/uti..</text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor.runWorker (9 samples, 6.29%)</title><rect x="59.5" y="2003.0" width="74.3" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="62.5" y="2014.0">java/uti..</text>
+</g>
+<g>
+<title>I2C/C2I adapters (1 samples, 0.70%)</title><rect x="59.5" y="1987.0" width="8.3" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="62.5" y="1998.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit$$Lambda$276/2061930465.run (7 samples, 4.90%)</title><rect x="67.8" y="1987.0" width="57.7" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="70.8" y="1998.0">com/li..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit.lambda$putTask$0 (7 samples, 4.90%)</title><rect x="67.8" y="1971.0" width="57.7" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="70.8" y="1982.0">com/li..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit.processTask (7 samples, 4.90%)</title><rect x="67.8" y="1955.0" width="57.7" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="70.8" y="1966.0">com/li..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.scheduleThenProcess (7 samples, 4.90%)</title><rect x="67.8" y="1939.0" width="57.7" height="15" fill="#59ea59" rx="2" ry="2"/>
+<text x="70.8" y="1950.0">com/li..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.extract (2 samples, 1.40%)</title><rect x="67.8" y="1923.0" width="16.5" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="70.8" y="1934.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner$$Lambda$41/1384010761.extract (2 samples, 1.40%)</title><rect x="67.8" y="1907.0" width="16.5" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="70.8" y="1918.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner.lambda$init$0 (2 samples, 1.40%)</title><rect x="67.8" y="1891.0" width="16.5" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="70.8" y="1902.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Task$KafkaDeserializer.deserialize (2 samples, 1.40%)</title><rect x="67.8" y="1875.0" width="16.5" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="70.8" y="1886.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Task$KafkaDeserializer.deserialize (2 samples, 1.40%)</title><rect x="67.8" y="1859.0" width="16.5" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="70.8" y="1870.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/ObjectMapper.readValue (2 samples, 1.40%)</title><rect x="67.8" y="1843.0" width="16.5" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="70.8" y="1854.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/JsonFactory.createParser (1 samples, 0.70%)</title><rect x="67.8" y="1827.0" width="8.2" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="70.8" y="1838.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/JsonFactory._createContext (1 samples, 0.70%)</title><rect x="67.8" y="1811.0" width="8.2" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="70.8" y="1822.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/JsonFactory._getBufferRecycler (1 samples, 0.70%)</title><rect x="67.8" y="1795.0" width="8.2" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="70.8" y="1806.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/util/BufferRecyclers.getBufferRecycler (1 samples, 0.70%)</title><rect x="67.8" y="1779.0" width="8.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="70.8" y="1790.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal.get (1 samples, 0.70%)</title><rect x="67.8" y="1763.0" width="8.2" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="70.8" y="1774.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal$ThreadLocalMap.access$000 (1 samples, 0.70%)</title><rect x="67.8" y="1747.0" width="8.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="70.8" y="1758.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal$ThreadLocalMap.getEntry (1 samples, 0.70%)</title><rect x="67.8" y="1731.0" width="8.2" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="70.8" y="1742.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/ObjectMapper._readMapAndClose (1 samples, 0.70%)</title><rect x="76.0" y="1827.0" width="8.3" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="79.0" y="1838.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/ObjectMapper.createDeserializationContext (1 samples, 0.70%)</title><rect x="76.0" y="1811.0" width="8.3" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="79.0" y="1822.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/DefaultDeserializationContext$Impl.createInstance (1 samples, 0.70%)</title><rect x="76.0" y="1795.0" width="8.3" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="79.0" y="1806.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.process (5 samples, 3.50%)</title><rect x="84.3" y="1923.0" width="41.2" height="15" fill="#5eef5e" rx="2" ry="2"/>
+<text x="87.3" y="1934.0">com..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/LoggingContext.close (2 samples, 1.40%)</title><rect x="84.3" y="1907.0" width="16.5" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="87.3" y="1918.0"></text>
+</g>
+<g>
+<title>org/slf4j/MDC.remove (2 samples, 1.40%)</title><rect x="84.3" y="1891.0" width="16.5" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="87.3" y="1902.0"></text>
+</g>
+<g>
+<title>ch/qos/logback/classic/util/LogbackMDCAdapter.remove (2 samples, 1.40%)</title><rect x="84.3" y="1875.0" width="16.5" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="87.3" y="1886.0"></text>
+</g>
+<g>
+<title>java/util/Collections$SynchronizedMap.remove (2 samples, 1.40%)</title><rect x="84.3" y="1859.0" width="16.5" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="87.3" y="1870.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.remove (1 samples, 0.70%)</title><rect x="92.5" y="1843.0" width="8.3" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="95.5" y="1854.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.removeNode (1 samples, 0.70%)</title><rect x="92.5" y="1827.0" width="8.3" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="95.5" y="1838.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessingContextImpl.push (3 samples, 2.10%)</title><rect x="100.8" y="1907.0" width="24.7" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="103.8" y="1918.0">c..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessingContextImpl.pushDownStream (3 samples, 2.10%)</title><rect x="100.8" y="1891.0" width="24.7" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="103.8" y="1902.0">c..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner$$Lambda$203/1334245820.process (2 samples, 1.40%)</title><rect x="109.0" y="1875.0" width="16.5" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="112.0" y="1886.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner.lambda$null$1 (2 samples, 1.40%)</title><rect x="109.0" y="1859.0" width="16.5" height="15" fill="#59ea59" rx="2" ry="2"/>
+<text x="112.0" y="1870.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Recording.process (2 samples, 1.40%)</title><rect x="109.0" y="1843.0" width="16.5" height="15" fill="#59ea59" rx="2" ry="2"/>
+<text x="112.0" y="1854.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Recording$ChildRecording.process (2 samples, 1.40%)</title><rect x="109.0" y="1827.0" width="16.5" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="112.0" y="1838.0"></text>
+</g>
+<g>
+<title>java/lang/Thread.sleep (2 samples, 1.40%)</title><rect x="109.0" y="1811.0" width="16.5" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="112.0" y="1822.0"></text>
+</g>
+<g>
+<title>JVM_Sleep (2 samples, 1.40%)</title><rect x="109.0" y="1795.0" width="16.5" height="15" fill="#f37373" rx="2" ry="2"/>
+<text x="112.0" y="1806.0"></text>
+</g>
+<g>
+<title>HandleMark::pop_and_restore() (1 samples, 0.70%)</title><rect x="109.0" y="1779.0" width="8.3" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="112.0" y="1790.0"></text>
+</g>
+<g>
+<title>os::sleep(Thread*, long, bool) (1 samples, 0.70%)</title><rect x="117.3" y="1779.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="120.3" y="1790.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor.runStateAtLeast (1 samples, 0.70%)</title><rect x="125.5" y="1987.0" width="8.3" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="128.5" y="1998.0"></text>
+</g>
+<g>
+<title>start_thread (128 samples, 89.51%)</title><rect x="133.8" y="2035.0" width="1056.2" height="15" fill="#fe8080" rx="2" ry="2"/>
+<text x="136.8" y="2046.0">start_thread</text>
+</g>
+<g>
+<title>java_start(Thread*) (128 samples, 89.51%)</title><rect x="133.8" y="2019.0" width="1056.2" height="15" fill="#e96565" rx="2" ry="2"/>
+<text x="136.8" y="2030.0">java_start(Thread*)</text>
+</g>
+<g>
+<title>GangWorker::loop() (16 samples, 11.19%)</title><rect x="133.8" y="2003.0" width="132.0" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="136.8" y="2014.0">GangWorker::loop()</text>
+</g>
+<g>
+<title>G1ParPreserveCMReferentsTask::work(unsigned int) (3 samples, 2.10%)</title><rect x="133.8" y="1987.0" width="24.7" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="136.8" y="1998.0">G..</text>
+</g>
+<g>
+<title>G1ParEvacuateFollowersClosure::do_void() (3 samples, 2.10%)</title><rect x="133.8" y="1971.0" width="24.7" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="136.8" y="1982.0">G..</text>
+</g>
+<g>
+<title>ParallelTaskTerminator::offer_termination(TerminatorTerminator*) (1 samples, 0.70%)</title><rect x="133.8" y="1955.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="136.8" y="1966.0"></text>
+</g>
+<g>
+<title>SpinPause (2 samples, 1.40%)</title><rect x="142.0" y="1955.0" width="16.5" height="15" fill="#f27171" rx="2" ry="2"/>
+<text x="145.0" y="1966.0"></text>
+</g>
+<g>
+<title>G1ParTask::work(unsigned int) [clone .part.431] (13 samples, 9.09%)</title><rect x="158.5" y="1987.0" width="107.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="161.5" y="1998.0">G1ParTask::wo..</text>
+</g>
+<g>
+<title>G1ParEvacuateFollowersClosure::do_void() (13 samples, 9.09%)</title><rect x="158.5" y="1971.0" width="107.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="161.5" y="1982.0">G1ParEvacuate..</text>
+</g>
+<g>
+<title>G1ParScanThreadState::trim_queue() (3 samples, 2.10%)</title><rect x="166.8" y="1955.0" width="24.7" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="169.8" y="1966.0">G..</text>
+</g>
+<g>
+<title>void G1ParScanClosure::do_oop_nv&lt;unsigned int&gt;(unsigned int*) (1 samples, 0.70%)</title><rect x="183.3" y="1939.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="186.3" y="1950.0"></text>
+</g>
+<g>
+<title>GenericTaskQueueSet&lt;OverflowTaskQueue&lt;StarTask, (MemoryType)5, 131072u&gt;, (MemoryType)5&gt;::steal_best_of_2(unsigned int, int*, StarTask&amp;) (3 samples, 2.10%)</title><rect x="191.5" y="1955.0" width="24.8" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="194.5" y="1966.0">G..</text>
+</g>
+<g>
+<title>ParallelTaskTerminator::offer_termination(TerminatorTerminator*) (3 samples, 2.10%)</title><rect x="216.3" y="1955.0" width="24.7" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="219.3" y="1966.0">P..</text>
+</g>
+<g>
+<title>SpinPause (3 samples, 2.10%)</title><rect x="241.0" y="1955.0" width="24.8" height="15" fill="#eb6767" rx="2" ry="2"/>
+<text x="244.0" y="1966.0">S..</text>
+</g>
+<g>
+<title>JavaThread::thread_main_inner() (111 samples, 77.62%)</title><rect x="265.8" y="2003.0" width="915.9" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="268.8" y="2014.0">JavaThread::thread_main_inner()</text>
+</g>
+<g>
+<title>CompileBroker::compiler_thread_loop() (111 samples, 77.62%)</title><rect x="265.8" y="1987.0" width="915.9" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="268.8" y="1998.0">CompileBroker::compiler_thread_loop()</text>
+</g>
+<g>
+<title>CompileBroker::invoke_compiler_on_method(CompileTask*) (111 samples, 77.62%)</title><rect x="265.8" y="1971.0" width="915.9" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="268.8" y="1982.0">CompileBroker::invoke_compiler_on_method(CompileTask*)</text>
+</g>
+<g>
+<title>C2Compiler::compile_method(ciEnv*, ciMethod*, int) (109 samples, 76.22%)</title><rect x="265.8" y="1955.0" width="899.4" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="268.8" y="1966.0">C2Compiler::compile_method(ciEnv*, ciMethod*, int)</text>
+</g>
+<g>
+<title>Compile::Compile(ciEnv*, C2Compiler*, ciMethod*, int, bool, bool, bool) (109 samples, 76.22%)</title><rect x="265.8" y="1939.0" width="899.4" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="268.8" y="1950.0">Compile::Compile(ciEnv*, C2Compiler*, ciMethod*, int, bool, bool, bool)</text>
+</g>
+<g>
+<title>Compile::Code_Gen() (44 samples, 30.77%)</title><rect x="265.8" y="1923.0" width="363.1" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="268.8" y="1934.0">Compile::Code_Gen()</text>
+</g>
+<g>
+<title>Compile::Output() (1 samples, 0.70%)</title><rect x="265.8" y="1907.0" width="8.3" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="268.8" y="1918.0"></text>
+</g>
+<g>
+<title>Compile::init_buffer(unsigned int*) (1 samples, 0.70%)</title><rect x="265.8" y="1891.0" width="8.3" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="268.8" y="1902.0"></text>
+</g>
+<g>
+<title>Compile::shorten_branches(unsigned int*, int&amp;, int&amp;, int&amp;) (1 samples, 0.70%)</title><rect x="265.8" y="1875.0" width="8.3" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="268.8" y="1886.0"></text>
+</g>
+<g>
+<title>Compile::fill_buffer(CodeBuffer*, unsigned int*) (2 samples, 1.40%)</title><rect x="274.1" y="1907.0" width="16.5" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="277.1" y="1918.0"></text>
+</g>
+<g>
+<title>Compile::Process_OopMap_Node(MachNode*, int) (1 samples, 0.70%)</title><rect x="282.3" y="1891.0" width="8.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="285.3" y="1902.0"></text>
+</g>
+<g>
+<title>DebugInformationRecorder::create_scope_values(GrowableArray&lt;ScopeValue*&gt;*) (1 samples, 0.70%)</title><rect x="282.3" y="1875.0" width="8.3" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="285.3" y="1886.0"></text>
+</g>
+<g>
+<title>CompressedWriteStream::write_int_mb(int) (1 samples, 0.70%)</title><rect x="282.3" y="1859.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="285.3" y="1870.0"></text>
+</g>
+<g>
+<title>Matcher::match() (7 samples, 4.90%)</title><rect x="290.6" y="1907.0" width="57.7" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="293.6" y="1918.0">Matche..</text>
+</g>
+<g>
+<title>ConNode::Opcode() const (1 samples, 0.70%)</title><rect x="290.6" y="1891.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="293.6" y="1902.0"></text>
+</g>
+<g>
+<title>Matcher::xform(Node*, int) (6 samples, 4.20%)</title><rect x="298.8" y="1891.0" width="49.5" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="301.8" y="1902.0">Match..</text>
+</g>
+<g>
+<title>Arena::contains(void const*) const (3 samples, 2.10%)</title><rect x="307.1" y="1875.0" width="24.7" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="310.1" y="1886.0">A..</text>
+</g>
+<g>
+<title>Matcher::match_tree(Node const*) (2 samples, 1.40%)</title><rect x="331.8" y="1875.0" width="16.5" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="334.8" y="1886.0"></text>
+</g>
+<g>
+<title>Matcher::Label_Root(Node const*, State*, Node*, Node const*) (1 samples, 0.70%)</title><rect x="331.8" y="1859.0" width="8.3" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="334.8" y="1870.0"></text>
+</g>
+<g>
+<title>Matcher::Label_Root(Node const*, State*, Node*, Node const*) (1 samples, 0.70%)</title><rect x="331.8" y="1843.0" width="8.3" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="334.8" y="1854.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst(State*, int, Node*&amp;) (1 samples, 0.70%)</title><rect x="340.1" y="1859.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="343.1" y="1870.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst_Interior(State*, int, Node*&amp;, MachNode*, unsigned int) (1 samples, 0.70%)</title><rect x="340.1" y="1843.0" width="8.2" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="343.1" y="1854.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceOper(State*, int, Node*&amp;, MachNode*) (1 samples, 0.70%)</title><rect x="340.1" y="1827.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="343.1" y="1838.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst(State*, int, Node*&amp;) (1 samples, 0.70%)</title><rect x="340.1" y="1811.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="343.1" y="1822.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst_Interior(State*, int, Node*&amp;, MachNode*, unsigned int) (1 samples, 0.70%)</title><rect x="340.1" y="1795.0" width="8.2" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="343.1" y="1806.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst(State*, int, Node*&amp;) (1 samples, 0.70%)</title><rect x="340.1" y="1779.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="343.1" y="1790.0"></text>
+</g>
+<g>
+<title>PhaseCFG::do_global_code_motion() (1 samples, 0.70%)</title><rect x="348.3" y="1907.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="351.3" y="1918.0"></text>
+</g>
+<g>
+<title>PhaseCFG::global_code_motion() (1 samples, 0.70%)</title><rect x="348.3" y="1891.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="351.3" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseCFG::schedule_late(VectorSet&amp;, Node_List&amp;) (1 samples, 0.70%)</title><rect x="348.3" y="1875.0" width="8.3" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="351.3" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseCFG::insert_anti_dependences(Block*, Node*, bool) (1 samples, 0.70%)</title><rect x="348.3" y="1859.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="351.3" y="1870.0"></text>
+</g>
+<g>
+<title>TypeRawPtr::add_offset(long) const (1 samples, 0.70%)</title><rect x="348.3" y="1843.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="351.3" y="1854.0"></text>
+</g>
+<g>
+<title>PhaseCFG::fixup_flow() (1 samples, 0.70%)</title><rect x="356.6" y="1907.0" width="8.2" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="359.6" y="1918.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::Register_Allocate() (32 samples, 22.38%)</title><rect x="364.8" y="1907.0" width="264.1" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="367.8" y="1918.0">PhaseChaitin::Register_Allocate()</text>
+</g>
+<g>
+<title>MachNode::rematerialize() const (1 samples, 0.70%)</title><rect x="364.8" y="1891.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="367.8" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseAggressiveCoalesce::insert_copies(Matcher&amp;) (1 samples, 0.70%)</title><rect x="373.1" y="1891.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="376.1" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::Select() (3 samples, 2.10%)</title><rect x="381.3" y="1891.0" width="24.8" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="384.3" y="1902.0">P..</text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (1 samples, 0.70%)</title><rect x="381.3" y="1875.0" width="8.3" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="384.3" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseIFG::re_insert(unsigned int) (2 samples, 1.40%)</title><rect x="389.6" y="1875.0" width="16.5" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="392.6" y="1886.0"></text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (2 samples, 1.40%)</title><rect x="389.6" y="1859.0" width="16.5" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="392.6" y="1870.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::Split(unsigned int, ResourceArea*) (6 samples, 4.20%)</title><rect x="406.1" y="1891.0" width="49.5" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="409.1" y="1902.0">Phase..</text>
+</g>
+<g>
+<title>Node::disconnect_inputs(Node*, Compile*) (1 samples, 0.70%)</title><rect x="447.3" y="1875.0" width="8.3" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="450.3" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::build_ifg_physical(ResourceArea*) (5 samples, 3.50%)</title><rect x="455.6" y="1891.0" width="41.3" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="458.6" y="1902.0">Pha..</text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (1 samples, 0.70%)</title><rect x="472.1" y="1875.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="475.1" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::interfere_with_live(unsigned int, IndexSet*) (1 samples, 0.70%)</title><rect x="480.3" y="1875.0" width="8.3" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="483.3" y="1886.0"></text>
+</g>
+<g>
+<title>RegMask::smear_to_sets(int) (1 samples, 0.70%)</title><rect x="488.6" y="1875.0" width="8.3" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="491.6" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::build_ifg_virtual() (1 samples, 0.70%)</title><rect x="496.9" y="1891.0" width="8.2" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="499.9" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::gather_lrg_masks(bool) [clone .constprop.215] (3 samples, 2.10%)</title><rect x="505.1" y="1891.0" width="24.8" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="508.1" y="1902.0">P..</text>
+</g>
+<g>
+<title>pthread_getspecific (1 samples, 0.70%)</title><rect x="521.6" y="1875.0" width="8.3" height="15" fill="#e66161" rx="2" ry="2"/>
+<text x="524.6" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::merge_multidefs() (1 samples, 0.70%)</title><rect x="529.9" y="1891.0" width="8.2" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="532.9" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::post_allocate_copy_removal() (2 samples, 1.40%)</title><rect x="538.1" y="1891.0" width="16.5" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="541.1" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::elide_copy(Node*, int, Block*, Node_List&amp;, Node_List&amp;, bool) (1 samples, 0.70%)</title><rect x="546.4" y="1875.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="549.4" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseCoalesce::coalesce_driver() (1 samples, 0.70%)</title><rect x="554.6" y="1891.0" width="8.3" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="557.6" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseConservativeCoalesce::coalesce(Block*) (1 samples, 0.70%)</title><rect x="554.6" y="1875.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="557.6" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseConservativeCoalesce::copy_copy(Node*, Node*, Block*, unsigned int) (1 samples, 0.70%)</title><rect x="554.6" y="1859.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="557.6" y="1870.0"></text>
+</g>
+<g>
+<title>PhaseConservativeCoalesce::update_ifg(unsigned int, unsigned int, IndexSet*, IndexSet*) (1 samples, 0.70%)</title><rect x="554.6" y="1843.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="557.6" y="1854.0"></text>
+</g>
+<g>
+<title>PhaseIFG::Compute_Effective_Degree() (3 samples, 2.10%)</title><rect x="562.9" y="1891.0" width="24.7" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="565.9" y="1902.0">P..</text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (2 samples, 1.40%)</title><rect x="571.1" y="1875.0" width="16.5" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="574.1" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseLive::compute(unsigned int) (5 samples, 3.50%)</title><rect x="587.6" y="1891.0" width="41.3" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="590.6" y="1902.0">Pha..</text>
+</g>
+<g>
+<title>PhaseLive::add_liveout(Block*, IndexSet*, VectorSet&amp;) (4 samples, 2.80%)</title><rect x="595.9" y="1875.0" width="33.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="598.9" y="1886.0">Ph..</text>
+</g>
+<g>
+<title>IndexSet::alloc_block_containing(unsigned int) (1 samples, 0.70%)</title><rect x="604.1" y="1859.0" width="8.3" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="607.1" y="1870.0"></text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (1 samples, 0.70%)</title><rect x="612.4" y="1859.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="615.4" y="1870.0"></text>
+</g>
+<g>
+<title>pthread_getspecific (1 samples, 0.70%)</title><rect x="620.6" y="1859.0" width="8.3" height="15" fill="#f87979" rx="2" ry="2"/>
+<text x="623.6" y="1870.0"></text>
+</g>
+<g>
+<title>Compile::Optimize() (60 samples, 41.96%)</title><rect x="628.9" y="1923.0" width="495.1" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="631.9" y="1934.0">Compile::Optimize()</text>
+</g>
+<g>
+<title>Compile::final_graph_reshaping() (1 samples, 0.70%)</title><rect x="628.9" y="1907.0" width="8.2" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="631.9" y="1918.0"></text>
+</g>
+<g>
+<title>Compile::final_graph_reshaping_walk(Node_Stack&amp;, Node*, Final_Reshape_Counts&amp;) (1 samples, 0.70%)</title><rect x="628.9" y="1891.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="631.9" y="1902.0"></text>
+</g>
+<g>
+<title>Compile::final_graph_reshaping_impl(Node*, Final_Reshape_Counts&amp;) (1 samples, 0.70%)</title><rect x="628.9" y="1875.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="631.9" y="1886.0"></text>
+</g>
+<g>
+<title>Node::disconnect_inputs(Node*, Compile*) (1 samples, 0.70%)</title><rect x="628.9" y="1859.0" width="8.2" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="631.9" y="1870.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::do_analysis(Compile*, PhaseIterGVN*) (4 samples, 2.80%)</title><rect x="637.1" y="1907.0" width="33.0" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="640.1" y="1918.0">Co..</text>
+</g>
+<g>
+<title>ConnectionGraph::compute_escape() (4 samples, 2.80%)</title><rect x="637.1" y="1891.0" width="33.0" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="640.1" y="1902.0">Co..</text>
+</g>
+<g>
+<title>ConnectionGraph::split_unique_types(GrowableArray&lt;Node*&gt;&amp;) (4 samples, 2.80%)</title><rect x="637.1" y="1875.0" width="33.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="640.1" y="1886.0">Co..</text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (2 samples, 1.40%)</title><rect x="637.1" y="1859.0" width="16.5" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="640.1" y="1870.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (2 samples, 1.40%)</title><rect x="637.1" y="1843.0" width="16.5" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="640.1" y="1854.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::create_split_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;, bool&amp;) (1 samples, 0.70%)</title><rect x="637.1" y="1827.0" width="8.3" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="640.1" y="1838.0"></text>
+</g>
+<g>
+<title>Compile::find_alias_type(TypePtr const*, bool, ciField*) [clone .part.334] (1 samples, 0.70%)</title><rect x="637.1" y="1811.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="640.1" y="1822.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1827.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="648.4" y="1838.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1811.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="648.4" y="1822.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1795.0" width="8.2" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="648.4" y="1806.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1779.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="648.4" y="1790.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1763.0" width="8.2" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="648.4" y="1774.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1747.0" width="8.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="648.4" y="1758.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1731.0" width="8.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="648.4" y="1742.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1715.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="648.4" y="1726.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1699.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="648.4" y="1710.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1683.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="648.4" y="1694.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1667.0" width="8.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="648.4" y="1678.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1651.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="648.4" y="1662.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1635.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="648.4" y="1646.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1619.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="648.4" y="1630.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1603.0" width="8.2" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="648.4" y="1614.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1587.0" width="8.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="648.4" y="1598.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1571.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="648.4" y="1582.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1555.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="648.4" y="1566.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1539.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="648.4" y="1550.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1523.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="648.4" y="1534.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1507.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="648.4" y="1518.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1491.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="648.4" y="1502.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1475.0" width="8.2" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="648.4" y="1486.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1459.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="648.4" y="1470.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1443.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="648.4" y="1454.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1427.0" width="8.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="648.4" y="1438.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1411.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="648.4" y="1422.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1395.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="648.4" y="1406.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1379.0" width="8.2" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="648.4" y="1390.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1363.0" width="8.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="648.4" y="1374.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1347.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="648.4" y="1358.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1331.0" width="8.2" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="648.4" y="1342.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1315.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="648.4" y="1326.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1299.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="648.4" y="1310.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1283.0" width="8.2" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="648.4" y="1294.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1267.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="648.4" y="1278.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1251.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="648.4" y="1262.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1235.0" width="8.2" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="648.4" y="1246.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1219.0" width="8.2" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="648.4" y="1230.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1203.0" width="8.2" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="648.4" y="1214.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1187.0" width="8.2" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="648.4" y="1198.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1171.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="648.4" y="1182.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1155.0" width="8.2" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="648.4" y="1166.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1139.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="648.4" y="1150.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1123.0" width="8.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="648.4" y="1134.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1107.0" width="8.2" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="648.4" y="1118.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1091.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="648.4" y="1102.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1075.0" width="8.2" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="648.4" y="1086.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1059.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="648.4" y="1070.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1043.0" width="8.2" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="648.4" y="1054.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1027.0" width="8.2" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="648.4" y="1038.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="1011.0" width="8.2" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="648.4" y="1022.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="995.0" width="8.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="648.4" y="1006.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="979.0" width="8.2" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="648.4" y="990.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="963.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="648.4" y="974.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="947.0" width="8.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="648.4" y="958.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="931.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="648.4" y="942.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="915.0" width="8.2" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="648.4" y="926.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="899.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="648.4" y="910.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="883.0" width="8.2" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="648.4" y="894.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="867.0" width="8.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="648.4" y="878.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="851.0" width="8.2" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="648.4" y="862.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="835.0" width="8.2" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="648.4" y="846.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="819.0" width="8.2" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="648.4" y="830.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="803.0" width="8.2" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="648.4" y="814.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="787.0" width="8.2" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="648.4" y="798.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="771.0" width="8.2" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="648.4" y="782.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="755.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="648.4" y="766.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_memory_phi(PhiNode*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="739.0" width="8.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="648.4" y="750.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::find_inst_mem(Node*, int, GrowableArray&lt;PhiNode*&gt;&amp;) (1 samples, 0.70%)</title><rect x="645.4" y="723.0" width="8.2" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="648.4" y="734.0"></text>
+</g>
+<g>
+<title>Node::uncast() const (1 samples, 0.70%)</title><rect x="645.4" y="707.0" width="8.2" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="648.4" y="718.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_AddP(Node*, Node*) (1 samples, 0.70%)</title><rect x="653.6" y="1859.0" width="8.3" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="656.6" y="1870.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::step_through_mergemem(MergeMemNode*, int, TypeOopPtr const*) (1 samples, 0.70%)</title><rect x="661.9" y="1859.0" width="8.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="664.9" y="1870.0"></text>
+</g>
+<g>
+<title>ciInstanceKlass::is_java_lang_Object() const (1 samples, 0.70%)</title><rect x="661.9" y="1843.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="664.9" y="1854.0"></text>
+</g>
+<g>
+<title>PhaseCCP::analyze() (1 samples, 0.70%)</title><rect x="670.1" y="1907.0" width="8.3" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="673.1" y="1918.0"></text>
+</g>
+<g>
+<title>PhaseCCP::do_transform() (1 samples, 0.70%)</title><rect x="678.4" y="1907.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="681.4" y="1918.0"></text>
+</g>
+<g>
+<title>PhaseCCP::transform(Node*) (1 samples, 0.70%)</title><rect x="678.4" y="1891.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="681.4" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseCCP::transform_once(Node*) (1 samples, 0.70%)</title><rect x="678.4" y="1875.0" width="8.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="681.4" y="1886.0"></text>
+</g>
+<g>
+<title>TypeNode::bottom_type() const (1 samples, 0.70%)</title><rect x="678.4" y="1859.0" width="8.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="681.4" y="1870.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_and_optimize(bool, bool) (43 samples, 30.07%)</title><rect x="686.6" y="1907.0" width="354.9" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="689.6" y="1918.0">PhaseIdealLoop::build_and_optimize(bool, bool)</text>
+</g>
+<g>
+<title>PhaseIdealLoop::Dominators() (2 samples, 1.40%)</title><rect x="686.6" y="1891.0" width="16.5" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="689.6" y="1902.0"></text>
+</g>
+<g>
+<title>NTarjan::DFS(NTarjan*, VectorSet&amp;, PhaseIdealLoop*, unsigned int*) (2 samples, 1.40%)</title><rect x="686.6" y="1875.0" width="16.5" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="689.6" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_late(VectorSet&amp;, Node_List&amp;, Node_Stack&amp;) (32 samples, 22.38%)</title><rect x="703.1" y="1891.0" width="264.1" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="706.1" y="1902.0">PhaseIdealLoop::build_loop_late(Vec..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_late_post(Node*) (28 samples, 19.58%)</title><rect x="736.2" y="1875.0" width="231.0" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="739.2" y="1886.0">PhaseIdealLoop::build_loop_late..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::get_late_ctrl(Node*, Node*) (25 samples, 17.48%)</title><rect x="760.9" y="1859.0" width="206.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="763.9" y="1870.0">PhaseIdealLoop::get_late_ct..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::dom_lca_for_get_late_ctrl_internal(Node*, Node*, Node*) (1 samples, 0.70%)</title><rect x="777.4" y="1843.0" width="8.3" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="780.4" y="1854.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::is_dominator(Node*, Node*) (22 samples, 15.38%)</title><rect x="785.7" y="1843.0" width="181.5" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="788.7" y="1854.0">PhaseIdealLoop::is_domi..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_tree() (2 samples, 1.40%)</title><rect x="967.2" y="1891.0" width="16.5" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="970.2" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_tree_impl(Node*, int) (1 samples, 0.70%)</title><rect x="975.5" y="1875.0" width="8.2" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="978.5" y="1886.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::split_if_with_blocks(VectorSet&amp;, Node_Stack&amp;) (1 samples, 0.70%)</title><rect x="983.7" y="1891.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="986.7" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::optimize() (5 samples, 3.50%)</title><rect x="992.0" y="1891.0" width="41.2" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="995.0" y="1902.0">Pha..</text>
+</g>
+<g>
+<title>PhaseIterGVN::transform_old(Node*) (5 samples, 3.50%)</title><rect x="992.0" y="1875.0" width="41.2" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="995.0" y="1886.0">Pha..</text>
+</g>
+<g>
+<title>CallNode::Ideal(PhaseGVN*, bool) (2 samples, 1.40%)</title><rect x="1000.2" y="1859.0" width="16.5" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1003.2" y="1870.0"></text>
+</g>
+<g>
+<title>Node::remove_dead_region(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1000.2" y="1843.0" width="8.3" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1003.2" y="1854.0"></text>
+</g>
+<g>
+<title>ParmNode::Opcode() const (1 samples, 0.70%)</title><rect x="1008.5" y="1843.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1011.5" y="1854.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::add_users_to_worklist(Node*) (1 samples, 0.70%)</title><rect x="1016.7" y="1859.0" width="8.3" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1019.7" y="1870.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::add_users_to_worklist0(Node*) (1 samples, 0.70%)</title><rect x="1016.7" y="1843.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1019.7" y="1854.0"></text>
+</g>
+<g>
+<title>PhiNode::Value(PhaseTransform*) const (1 samples, 0.70%)</title><rect x="1025.0" y="1859.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1028.0" y="1870.0"></text>
+</g>
+<g>
+<title>RegionNode::is_CFG() const (1 samples, 0.70%)</title><rect x="1033.2" y="1891.0" width="8.3" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1036.2" y="1902.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::optimize() (9 samples, 6.29%)</title><rect x="1041.5" y="1907.0" width="74.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1044.5" y="1918.0">PhaseIte..</text>
+</g>
+<g>
+<title>PhaseIterGVN::transform_old(Node*) (9 samples, 6.29%)</title><rect x="1041.5" y="1891.0" width="74.2" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1044.5" y="1902.0">PhaseIte..</text>
+</g>
+<g>
+<title>IfNode::Ideal(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1041.5" y="1875.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1044.5" y="1886.0"></text>
+</g>
+<g>
+<title>Node::remove_dead_region(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1041.5" y="1859.0" width="8.2" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1044.5" y="1870.0"></text>
+</g>
+<g>
+<title>LoadNode::Ideal(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1049.7" y="1875.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1052.7" y="1886.0"></text>
+</g>
+<g>
+<title>MemNode::find_previous_store(PhaseTransform*) (1 samples, 0.70%)</title><rect x="1049.7" y="1859.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1052.7" y="1870.0"></text>
+</g>
+<g>
+<title>MemNode::all_controls_dominate(Node*, Node*) (1 samples, 0.70%)</title><rect x="1049.7" y="1843.0" width="8.3" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1052.7" y="1854.0"></text>
+</g>
+<g>
+<title>Node::dominates(Node*, Node_List&amp;) (1 samples, 0.70%)</title><rect x="1049.7" y="1827.0" width="8.3" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1052.7" y="1838.0"></text>
+</g>
+<g>
+<title>LoadNode::Identity(PhaseTransform*) (1 samples, 0.70%)</title><rect x="1058.0" y="1875.0" width="8.2" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="1061.0" y="1886.0"></text>
+</g>
+<g>
+<title>LoadNode::is_instance_field_load_with_local_phi(Node*) (1 samples, 0.70%)</title><rect x="1058.0" y="1859.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1061.0" y="1870.0"></text>
+</g>
+<g>
+<title>TypeInstPtr::add_offset(long) const (1 samples, 0.70%)</title><rect x="1058.0" y="1843.0" width="8.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1061.0" y="1854.0"></text>
+</g>
+<g>
+<title>Type::hashcons() (1 samples, 0.70%)</title><rect x="1058.0" y="1827.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1061.0" y="1838.0"></text>
+</g>
+<g>
+<title>Dict::Insert(void*, void*, bool) (1 samples, 0.70%)</title><rect x="1058.0" y="1811.0" width="8.2" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1061.0" y="1822.0"></text>
+</g>
+<g>
+<title>TypeInstPtr::hash() const (1 samples, 0.70%)</title><rect x="1058.0" y="1795.0" width="8.2" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="1061.0" y="1806.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::subsume_node(Node*, Node*) (2 samples, 1.40%)</title><rect x="1066.2" y="1875.0" width="16.5" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1069.2" y="1886.0"></text>
+</g>
+<g>
+<title>NodeHash::hash_find_insert(Node*) (1 samples, 0.70%)</title><rect x="1066.2" y="1859.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1069.2" y="1870.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::remove_globally_dead_node(Node*) (1 samples, 0.70%)</title><rect x="1074.5" y="1859.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1077.5" y="1870.0"></text>
+</g>
+<g>
+<title>Node::replace_edge(Node*, Node*) (1 samples, 0.70%)</title><rect x="1074.5" y="1843.0" width="8.2" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1077.5" y="1854.0"></text>
+</g>
+<g>
+<title>PhiNode::Ideal(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1082.7" y="1875.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1085.7" y="1886.0"></text>
+</g>
+<g>
+<title>PhiNode::unique_input(PhaseTransform*) (1 samples, 0.70%)</title><rect x="1082.7" y="1859.0" width="8.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1085.7" y="1870.0"></text>
+</g>
+<g>
+<title>RegionNode::Ideal(PhaseGVN*, bool) (2 samples, 1.40%)</title><rect x="1091.0" y="1875.0" width="16.5" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1094.0" y="1886.0"></text>
+</g>
+<g>
+<title>RegionNode::is_unreachable_region(PhaseGVN*) const (2 samples, 1.40%)</title><rect x="1091.0" y="1859.0" width="16.5" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1094.0" y="1870.0"></text>
+</g>
+<g>
+<title>StoreNode::Ideal(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1107.5" y="1875.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1110.5" y="1886.0"></text>
+</g>
+<g>
+<title>InitializeNode::can_capture_store(StoreNode*, PhaseTransform*, bool) (1 samples, 0.70%)</title><rect x="1107.5" y="1859.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1110.5" y="1870.0"></text>
+</g>
+<g>
+<title>InitializeNode::detect_init_independence(Node*, int&amp;) (1 samples, 0.70%)</title><rect x="1107.5" y="1843.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1110.5" y="1854.0"></text>
+</g>
+<g>
+<title>InitializeNode::detect_init_independence(Node*, int&amp;) (1 samples, 0.70%)</title><rect x="1107.5" y="1827.0" width="8.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1110.5" y="1838.0"></text>
+</g>
+<g>
+<title>MemNode::all_controls_dominate(Node*, Node*) (1 samples, 0.70%)</title><rect x="1107.5" y="1811.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1110.5" y="1822.0"></text>
+</g>
+<g>
+<title>Node::dominates(Node*, Node_List&amp;) (1 samples, 0.70%)</title><rect x="1107.5" y="1795.0" width="8.2" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1110.5" y="1806.0"></text>
+</g>
+<g>
+<title>PhaseMacroExpand::expand_macro_nodes() (1 samples, 0.70%)</title><rect x="1115.7" y="1907.0" width="8.3" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="1118.7" y="1918.0"></text>
+</g>
+<g>
+<title>Type::hashcons() (1 samples, 0.70%)</title><rect x="1115.7" y="1891.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1118.7" y="1902.0"></text>
+</g>
+<g>
+<title>Type::cmp(Type const*, Type const*) (1 samples, 0.70%)</title><rect x="1115.7" y="1875.0" width="8.3" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1118.7" y="1886.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (5 samples, 3.50%)</title><rect x="1124.0" y="1923.0" width="41.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1127.0" y="1934.0">Par..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (5 samples, 3.50%)</title><rect x="1124.0" y="1907.0" width="41.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1127.0" y="1918.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (5 samples, 3.50%)</title><rect x="1124.0" y="1891.0" width="41.2" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1127.0" y="1902.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (5 samples, 3.50%)</title><rect x="1124.0" y="1875.0" width="41.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1127.0" y="1886.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (5 samples, 3.50%)</title><rect x="1124.0" y="1859.0" width="41.2" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="1127.0" y="1870.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_call() (5 samples, 3.50%)</title><rect x="1124.0" y="1843.0" width="41.2" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1127.0" y="1854.0">Par..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (5 samples, 3.50%)</title><rect x="1124.0" y="1827.0" width="41.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1127.0" y="1838.0">Par..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (5 samples, 3.50%)</title><rect x="1124.0" y="1811.0" width="41.2" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1127.0" y="1822.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (5 samples, 3.50%)</title><rect x="1124.0" y="1795.0" width="41.2" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1127.0" y="1806.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (5 samples, 3.50%)</title><rect x="1124.0" y="1779.0" width="41.2" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="1127.0" y="1790.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (5 samples, 3.50%)</title><rect x="1124.0" y="1763.0" width="41.2" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1127.0" y="1774.0">Par..</text>
+</g>
+<g>
+<title>Parse::do_call() (5 samples, 3.50%)</title><rect x="1124.0" y="1747.0" width="41.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1127.0" y="1758.0">Par..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.40%)</title><rect x="1124.0" y="1731.0" width="16.5" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1127.0" y="1742.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.40%)</title><rect x="1124.0" y="1715.0" width="16.5" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1127.0" y="1726.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (2 samples, 1.40%)</title><rect x="1124.0" y="1699.0" width="16.5" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="1127.0" y="1710.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (2 samples, 1.40%)</title><rect x="1124.0" y="1683.0" width="16.5" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1127.0" y="1694.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (2 samples, 1.40%)</title><rect x="1124.0" y="1667.0" width="16.5" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1127.0" y="1678.0"></text>
+</g>
+<g>
+<title>Parse::do_call() (2 samples, 1.40%)</title><rect x="1124.0" y="1651.0" width="16.5" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="1127.0" y="1662.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.40%)</title><rect x="1124.0" y="1635.0" width="16.5" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="1127.0" y="1646.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.40%)</title><rect x="1124.0" y="1619.0" width="16.5" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1127.0" y="1630.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (2 samples, 1.40%)</title><rect x="1124.0" y="1603.0" width="16.5" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1127.0" y="1614.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (2 samples, 1.40%)</title><rect x="1124.0" y="1587.0" width="16.5" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1127.0" y="1598.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (2 samples, 1.40%)</title><rect x="1124.0" y="1571.0" width="16.5" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1127.0" y="1582.0"></text>
+</g>
+<g>
+<title>Parse::do_call() (2 samples, 1.40%)</title><rect x="1124.0" y="1555.0" width="16.5" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1127.0" y="1566.0"></text>
+</g>
+<g>
+<title>GraphKit::round_double_arguments(ciMethod*) (1 samples, 0.70%)</title><rect x="1124.0" y="1539.0" width="8.2" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1127.0" y="1550.0"></text>
+</g>
+<g>
+<title>TypeFunc::make(ciMethod*) (1 samples, 0.70%)</title><rect x="1124.0" y="1523.0" width="8.2" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1127.0" y="1534.0"></text>
+</g>
+<g>
+<title>TypeTuple::make_range(ciSignature*) (1 samples, 0.70%)</title><rect x="1124.0" y="1507.0" width="8.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1127.0" y="1518.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (1 samples, 0.70%)</title><rect x="1132.2" y="1539.0" width="8.3" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1135.2" y="1550.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (1 samples, 0.70%)</title><rect x="1132.2" y="1523.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1135.2" y="1534.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (1 samples, 0.70%)</title><rect x="1132.2" y="1507.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1135.2" y="1518.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (1 samples, 0.70%)</title><rect x="1132.2" y="1491.0" width="8.3" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1135.2" y="1502.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (1 samples, 0.70%)</title><rect x="1132.2" y="1475.0" width="8.3" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1135.2" y="1486.0"></text>
+</g>
+<g>
+<title>Parse::do_field_access(bool, bool) (1 samples, 0.70%)</title><rect x="1132.2" y="1459.0" width="8.3" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1135.2" y="1470.0"></text>
+</g>
+<g>
+<title>Parse::do_put_xxx(Node*, ciField*, bool) (1 samples, 0.70%)</title><rect x="1132.2" y="1443.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1135.2" y="1454.0"></text>
+</g>
+<g>
+<title>GraphKit::store_oop(Node*, Node*, Node*, TypePtr const*, Node*, TypeOopPtr const*, BasicType, bool, MemNode::MemOrd, bool) (1 samples, 0.70%)</title><rect x="1132.2" y="1427.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1135.2" y="1438.0"></text>
+</g>
+<g>
+<title>GraphKit::g1_write_barrier_post(Node*, Node*, Node*, unsigned int, Node*, BasicType, bool) (1 samples, 0.70%)</title><rect x="1132.2" y="1411.0" width="8.3" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1135.2" y="1422.0"></text>
+</g>
+<g>
+<title>GraphKit::g1_mark_card(IdealKit&amp;, Node*, Node*, unsigned int, Node*, Node*, Node*, TypeFunc const*) (1 samples, 0.70%)</title><rect x="1132.2" y="1395.0" width="8.3" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1135.2" y="1406.0"></text>
+</g>
+<g>
+<title>PhaseGVN::transform_no_reclaim(Node*) (1 samples, 0.70%)</title><rect x="1132.2" y="1379.0" width="8.3" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1135.2" y="1390.0"></text>
+</g>
+<g>
+<title>AddPNode::Ideal(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1132.2" y="1363.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1135.2" y="1374.0"></text>
+</g>
+<g>
+<title>PredictedCallGenerator::generate(JVMState*) (3 samples, 2.10%)</title><rect x="1140.5" y="1731.0" width="24.7" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1143.5" y="1742.0">P..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.40%)</title><rect x="1140.5" y="1715.0" width="16.5" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1143.5" y="1726.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.40%)</title><rect x="1140.5" y="1699.0" width="16.5" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1143.5" y="1710.0"></text>
+</g>
+<g>
+<title>Parse::build_exits() (1 samples, 0.70%)</title><rect x="1140.5" y="1683.0" width="8.2" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1143.5" y="1694.0"></text>
+</g>
+<g>
+<title>GraphKit::clone_map() (1 samples, 0.70%)</title><rect x="1140.5" y="1667.0" width="8.2" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1143.5" y="1678.0"></text>
+</g>
+<g>
+<title>MergeMemNode::make(Compile*, Node*) (1 samples, 0.70%)</title><rect x="1140.5" y="1651.0" width="8.2" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1143.5" y="1662.0"></text>
+</g>
+<g>
+<title>MergeMemNode::MergeMemNode(Node*) (1 samples, 0.70%)</title><rect x="1140.5" y="1635.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1143.5" y="1646.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (1 samples, 0.70%)</title><rect x="1148.7" y="1683.0" width="8.3" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1151.7" y="1694.0"></text>
+</g>
+<g>
+<title>Parse::merge_common(Parse::Block*, int) (1 samples, 0.70%)</title><rect x="1148.7" y="1667.0" width="8.3" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1151.7" y="1678.0"></text>
+</g>
+<g>
+<title>PhaseGVN::transform_no_reclaim(Node*) (1 samples, 0.70%)</title><rect x="1148.7" y="1651.0" width="8.3" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1151.7" y="1662.0"></text>
+</g>
+<g>
+<title>UncommonTrapCallGenerator::generate(JVMState*) (1 samples, 0.70%)</title><rect x="1157.0" y="1715.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1160.0" y="1726.0"></text>
+</g>
+<g>
+<title>GraphKit::uncommon_trap(int, ciKlass*, char const*, bool, bool) (1 samples, 0.70%)</title><rect x="1157.0" y="1699.0" width="8.2" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1160.0" y="1710.0"></text>
+</g>
+<g>
+<title>GraphKit::make_runtime_call(int, TypeFunc const*, unsigned char*, char const*, TypePtr const*, Node*, Node*, Node*, Node*, Node*, Node*, Node*, Node*) (1 samples, 0.70%)</title><rect x="1157.0" y="1683.0" width="8.2" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1160.0" y="1694.0"></text>
+</g>
+<g>
+<title>GraphKit::set_predefined_input_for_runtime_call(SafePointNode*) (1 samples, 0.70%)</title><rect x="1157.0" y="1667.0" width="8.2" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1160.0" y="1678.0"></text>
+</g>
+<g>
+<title>PhaseGVN::transform_no_reclaim(Node*) (1 samples, 0.70%)</title><rect x="1157.0" y="1651.0" width="8.2" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1160.0" y="1662.0"></text>
+</g>
+<g>
+<title>MergeMemNode::Ideal(PhaseGVN*, bool) (1 samples, 0.70%)</title><rect x="1157.0" y="1635.0" width="8.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1160.0" y="1646.0"></text>
+</g>
+<g>
+<title>Compiler::compile_method(ciEnv*, ciMethod*, int) (2 samples, 1.40%)</title><rect x="1165.2" y="1955.0" width="16.5" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1168.2" y="1966.0"></text>
+</g>
+<g>
+<title>Compilation::Compilation(AbstractCompiler*, ciEnv*, ciMethod*, int, BufferBlob*) (2 samples, 1.40%)</title><rect x="1165.2" y="1939.0" width="16.5" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1168.2" y="1950.0"></text>
+</g>
+<g>
+<title>Compilation::compile_method() (2 samples, 1.40%)</title><rect x="1165.2" y="1923.0" width="16.5" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1168.2" y="1934.0"></text>
+</g>
+<g>
+<title>Compilation::compile_java_method() (1 samples, 0.70%)</title><rect x="1165.2" y="1907.0" width="8.3" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1168.2" y="1918.0"></text>
+</g>
+<g>
+<title>Compilation::emit_code_body() (1 samples, 0.70%)</title><rect x="1165.2" y="1891.0" width="8.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1168.2" y="1902.0"></text>
+</g>
+<g>
+<title>LIR_Assembler::emit_code(BlockList*) (1 samples, 0.70%)</title><rect x="1165.2" y="1875.0" width="8.3" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1168.2" y="1886.0"></text>
+</g>
+<g>
+<title>LIR_Assembler::emit_op2(LIR_Op2*) (1 samples, 0.70%)</title><rect x="1165.2" y="1859.0" width="8.3" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="1168.2" y="1870.0"></text>
+</g>
+<g>
+<title>ciEnv::register_method(ciMethod*, int, CodeOffsets*, int, CodeBuffer*, int, OopMapSet*, ExceptionHandlerTable*, ImplicitExceptionTable*, AbstractCompiler*, int, bool, bool, RTMState) (1 samples, 0.70%)</title><rect x="1173.5" y="1907.0" width="8.2" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1176.5" y="1918.0"></text>
+</g>
+<g>
+<title>nmethod::new_nmethod(methodHandle, int, int, CodeOffsets*, int, DebugInformationRecorder*, Dependencies*, CodeBuffer*, int, OopMapSet*, ExceptionHandlerTable*, ImplicitExceptionTable*, AbstractCompiler*, int) (1 samples, 0.70%)</title><rect x="1173.5" y="1891.0" width="8.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1176.5" y="1902.0"></text>
+</g>
+<g>
+<title>DebugInformationRecorder::pcs_size() (1 samples, 0.70%)</title><rect x="1173.5" y="1875.0" width="8.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1176.5" y="1886.0"></text>
+</g>
+<g>
+<title>VMThread::run() (1 samples, 0.70%)</title><rect x="1181.7" y="2003.0" width="8.3" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1184.7" y="2014.0"></text>
+</g>
+<g>
+<title>VMThread::loop() (1 samples, 0.70%)</title><rect x="1181.7" y="1987.0" width="8.3" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="1184.7" y="1998.0"></text>
+</g>
+<g>
+<title>SafepointSynchronize::begin() (1 samples, 0.70%)</title><rect x="1181.7" y="1971.0" width="8.3" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="1184.7" y="1982.0"></text>
+</g>
+</g>
+</svg>
