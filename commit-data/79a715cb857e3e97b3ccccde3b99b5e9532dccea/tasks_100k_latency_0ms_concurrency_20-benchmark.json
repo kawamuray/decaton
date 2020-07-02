@@ -1,0 +1,32 @@
+{
+  "performance" : {
+    "totalTasks" : 100000,
+    "executionTime" : 1103666666,
+    "throughput" : 91713.21371522424,
+    "deliveryLatency" : {
+      "avg" : 369333333,
+      "max" : 601000000
+    }
+  },
+  "resource" : {
+    "threads" : 61,
+    "totalCpuTimeNs" : 6911979057,
+    "totalAllocatedBytes" : 842099102
+  },
+  "jvmStats" : {
+    "gcStats" : {
+      "G1 Young Generation" : {
+        "count" : 2,
+        "time" : 48
+      },
+      "G1 Old Generation" : {
+        "count" : 0,
+        "time" : 0
+      }
+    }
+  },
+  "extraInfo" : {
+    "profilerOutput" : "tasks_100k_latency_0ms_concurrency_20-profile.svg",
+    "taskstatsOutput" : null
+  }
+}

@@ -1,17 +1,17 @@
 {
   "performance" : {
     "totalTasks" : 10000,
-    "executionTime" : 1862000000,
-    "throughput" : 5370.590950313504,
+    "executionTime" : 1982666666,
+    "throughput" : 5044.839893575859,
     "deliveryLatency" : {
-      "avg" : 825000000,
-      "max" : 1797000000
+      "avg" : 843000000,
+      "max" : 1924666666
     }
   },
   "resource" : {
     "threads" : 61,
-    "totalCpuTimeNs" : 5146388964,
-    "totalAllocatedBytes" : 492912369
+    "totalCpuTimeNs" : 5151659663,
+    "totalAllocatedBytes" : 488295217
   },
   "jvmStats" : {
     "gcStats" : {

@@ -1,0 +1,2297 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="870" onload="init(evt)" viewBox="0 0 1200 870" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom();
+			zoom(target);
+		}
+		else if (e.target.id == "unzoom") unzoom();
+		else if (e.target.id == "search") search_prompt();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	}, false)
+
+	// functions
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+		return;
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x = txt.length - 2; x > 0; x--) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0" y="0" width="100%" height="100%" fill="rgb(240,240,220)"/>
+<text id="title" x="600" y="24">Flame Graph</text>
+<text id="details" x="10" y="853"> </text>
+<text id="unzoom" x="10" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1090" y="24">Search</text>
+<text id="matched" x="1090" y="853"> </text>
+<g id="frames">
+<g>
+<title>all (168 samples, 100.00%)</title><rect x="10.0" y="819.0" width="1180.0" height="15" fill="#fa7b7b" rx="2" ry="2"/>
+<text x="13.0" y="830.0">all</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription.run (36 samples, 21.43%)</title><rect x="10.0" y="803.0" width="252.9" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="13.0" y="814.0">com/linecorp/decaton/processor/run..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription.pollOnce (36 samples, 21.43%)</title><rect x="10.0" y="787.0" width="252.9" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="13.0" y="798.0">com/linecorp/decaton/processor/run..</text>
+</g>
+<g>
+<title>java/lang/Iterable.forEach (23 samples, 13.69%)</title><rect x="10.0" y="771.0" width="161.5" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="13.0" y="782.0">java/lang/Iterable.fo..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription$$Lambda$247/1514315010.accept (22 samples, 13.10%)</title><rect x="10.0" y="755.0" width="154.5" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="13.0" y="766.0">com/linecorp/decaton..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorSubscription.lambda$pollOnce$0 (22 samples, 13.10%)</title><rect x="10.0" y="739.0" width="154.5" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="13.0" y="750.0">com/linecorp/decaton..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/BlacklistedKeysFilter.shouldTake (1 samples, 0.60%)</title><rect x="10.0" y="723.0" width="7.0" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="13.0" y="734.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/PartitionContext.addRequest (16 samples, 9.52%)</title><rect x="17.0" y="723.0" width="112.4" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="20.0" y="734.0">com/linecorp/d..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/PartitionProcessor.addTask (16 samples, 9.52%)</title><rect x="17.0" y="707.0" width="112.4" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="20.0" y="718.0">com/linecorp/d..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit.putTask (16 samples, 9.52%)</title><rect x="17.0" y="691.0" width="112.4" height="15" fill="#60f160" rx="2" ry="2"/>
+<text x="20.0" y="702.0">com/linecorp/d..</text>
+</g>
+<g>
+<title>java/util/concurrent/Executors$DelegatedExecutorService.execute (16 samples, 9.52%)</title><rect x="17.0" y="675.0" width="112.4" height="15" fill="#5eef5e" rx="2" ry="2"/>
+<text x="20.0" y="686.0">java/util/conc..</text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor.execute (16 samples, 9.52%)</title><rect x="17.0" y="659.0" width="112.4" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="20.0" y="670.0">java/util/conc..</text>
+</g>
+<g>
+<title>java/util/concurrent/LinkedBlockingQueue.offer (16 samples, 9.52%)</title><rect x="17.0" y="643.0" width="112.4" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="20.0" y="654.0">java/util/conc..</text>
+</g>
+<g>
+<title>java/util/concurrent/LinkedBlockingQueue.signalNotEmpty (16 samples, 9.52%)</title><rect x="17.0" y="627.0" width="112.4" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="20.0" y="638.0">java/util/conc..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer$ConditionObject.signal (3 samples, 1.79%)</title><rect x="17.0" y="611.0" width="21.1" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="20.0" y="622.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer$ConditionObject.doSignal (3 samples, 1.79%)</title><rect x="17.0" y="595.0" width="21.1" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="20.0" y="606.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.transferForSignal (3 samples, 1.79%)</title><rect x="17.0" y="579.0" width="21.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="20.0" y="590.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.enq (3 samples, 1.79%)</title><rect x="17.0" y="563.0" width="21.1" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="20.0" y="574.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/ReentrantLock.lock (1 samples, 0.60%)</title><rect x="38.1" y="611.0" width="7.0" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="41.1" y="622.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/ReentrantLock$NonfairSync.lock (1 samples, 0.60%)</title><rect x="38.1" y="595.0" width="7.0" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="41.1" y="606.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.compareAndSetState (1 samples, 0.60%)</title><rect x="38.1" y="579.0" width="7.0" height="15" fill="#50e150" rx="2" ry="2"/>
+<text x="41.1" y="590.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/ReentrantLock.unlock (12 samples, 7.14%)</title><rect x="45.1" y="611.0" width="84.3" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="48.1" y="622.0">java/util/..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.release (12 samples, 7.14%)</title><rect x="45.1" y="595.0" width="84.3" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="48.1" y="606.0">java/util/..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.unparkSuccessor (12 samples, 7.14%)</title><rect x="45.1" y="579.0" width="84.3" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="48.1" y="590.0">java/util/..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/LockSupport.unpark (12 samples, 7.14%)</title><rect x="45.1" y="563.0" width="84.3" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="48.1" y="574.0">java/util/..</text>
+</g>
+<g>
+<title>sun/misc/Unsafe.unpark (12 samples, 7.14%)</title><rect x="45.1" y="547.0" width="84.3" height="15" fill="#5ced5c" rx="2" ry="2"/>
+<text x="48.1" y="558.0">sun/misc/U..</text>
+</g>
+<g>
+<title>Unsafe_Unpark (12 samples, 7.14%)</title><rect x="45.1" y="531.0" width="84.3" height="15" fill="#e45f5f" rx="2" ry="2"/>
+<text x="48.1" y="542.0">Unsafe_Unp..</text>
+</g>
+<g>
+<title>BarrierSet::read_barrier(oopDesc*) (1 samples, 0.60%)</title><rect x="45.1" y="515.0" width="7.0" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="48.1" y="526.0"></text>
+</g>
+<g>
+<title>Parker::unpark() (1 samples, 0.60%)</title><rect x="52.1" y="515.0" width="7.1" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="55.1" y="526.0"></text>
+</g>
+<g>
+<title>__pthread_cond_signal (7 samples, 4.17%)</title><rect x="59.2" y="515.0" width="49.1" height="15" fill="#e76262" rx="2" ry="2"/>
+<text x="62.2" y="526.0">__pth..</text>
+</g>
+<g>
+<title>java_lang_Thread::park_event(oopDesc*) (1 samples, 0.60%)</title><rect x="108.3" y="515.0" width="7.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="111.3" y="526.0"></text>
+</g>
+<g>
+<title>pthread_mutex_lock (2 samples, 1.19%)</title><rect x="115.4" y="515.0" width="14.0" height="15" fill="#fa7b7b" rx="2" ry="2"/>
+<text x="118.4" y="526.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/PartitionContexts.get (1 samples, 0.60%)</title><rect x="129.4" y="723.0" width="7.0" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="132.4" y="734.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.get (1 samples, 0.60%)</title><rect x="129.4" y="707.0" width="7.0" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="132.4" y="718.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.getNode (1 samples, 0.60%)</title><rect x="129.4" y="691.0" width="7.0" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="132.4" y="702.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/TaskRequest.&lt;init&gt; (3 samples, 1.79%)</title><rect x="136.4" y="723.0" width="21.1" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="139.4" y="734.0">c..</text>
+</g>
+<g>
+<title>java/lang/StringBuilder.append (3 samples, 1.79%)</title><rect x="136.4" y="707.0" width="21.1" height="15" fill="#5eef5e" rx="2" ry="2"/>
+<text x="139.4" y="718.0">j..</text>
+</g>
+<g>
+<title>java/lang/AbstractStringBuilder.append (1 samples, 0.60%)</title><rect x="150.5" y="691.0" width="7.0" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="153.5" y="702.0"></text>
+</g>
+<g>
+<title>java/lang/AbstractStringBuilder.ensureCapacityInternal (1 samples, 0.60%)</title><rect x="150.5" y="675.0" width="7.0" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="153.5" y="686.0"></text>
+</g>
+<g>
+<title>java/util/Arrays.copyOf (1 samples, 0.60%)</title><rect x="150.5" y="659.0" width="7.0" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="153.5" y="670.0"></text>
+</g>
+<g>
+<title>jshort_disjoint_arraycopy (1 samples, 0.60%)</title><rect x="157.5" y="723.0" width="7.0" height="15" fill="#f06f6f" rx="2" ry="2"/>
+<text x="160.5" y="734.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/AbstractIterator.hasNext (1 samples, 0.60%)</title><rect x="164.5" y="755.0" width="7.0" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="167.5" y="766.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/AbstractIterator.maybeComputeNext (1 samples, 0.60%)</title><rect x="164.5" y="739.0" width="7.0" height="15" fill="#5ced5c" rx="2" ry="2"/>
+<text x="167.5" y="750.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/ConsumerRecords$ConcatenatedIterable$1.makeNext (1 samples, 0.60%)</title><rect x="164.5" y="723.0" width="7.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="167.5" y="734.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/ConsumerRecords$ConcatenatedIterable$1.makeNext (1 samples, 0.60%)</title><rect x="164.5" y="707.0" width="7.0" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="167.5" y="718.0"></text>
+</g>
+<g>
+<title>java/util/HashMap$ValueIterator.next (1 samples, 0.60%)</title><rect x="164.5" y="691.0" width="7.0" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="167.5" y="702.0"></text>
+</g>
+<g>
+<title>java/util/HashMap$HashIterator.nextNode (1 samples, 0.60%)</title><rect x="164.5" y="675.0" width="7.0" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="167.5" y="686.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.poll (13 samples, 7.74%)</title><rect x="171.5" y="771.0" width="91.4" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="174.5" y="782.0">org/apache/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.poll (13 samples, 7.74%)</title><rect x="171.5" y="755.0" width="91.4" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="174.5" y="766.0">org/apache/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.pollForFetches (6 samples, 3.57%)</title><rect x="171.5" y="739.0" width="42.2" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="174.5" y="750.0">org/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.fetchedRecords (6 samples, 3.57%)</title><rect x="171.5" y="723.0" width="42.2" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="174.5" y="734.0">org/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.fetchRecords (6 samples, 3.57%)</title><rect x="171.5" y="707.0" width="42.2" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="174.5" y="718.0">org/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$CompletedFetch.access$1700 (6 samples, 3.57%)</title><rect x="171.5" y="691.0" width="42.2" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="174.5" y="702.0">org/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$CompletedFetch.fetchRecords (6 samples, 3.57%)</title><rect x="171.5" y="675.0" width="42.2" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="174.5" y="686.0">org/..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$CompletedFetch.nextFetchedRecord (5 samples, 2.98%)</title><rect x="171.5" y="659.0" width="35.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="174.5" y="670.0">org..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$CompletedFetch.drain (1 samples, 0.60%)</title><rect x="178.6" y="643.0" width="7.0" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="181.6" y="654.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$FetchResponseMetricAggregator.record (1 samples, 0.60%)</title><rect x="178.6" y="627.0" width="7.0" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="181.6" y="638.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$CompletedFetch.maybeEnsureValid (2 samples, 1.19%)</title><rect x="185.6" y="643.0" width="14.0" height="15" fill="#50e150" rx="2" ry="2"/>
+<text x="188.6" y="654.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/DefaultRecordBatch.ensureValid (2 samples, 1.19%)</title><rect x="185.6" y="627.0" width="14.0" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="188.6" y="638.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/DefaultRecordBatch.isValid (2 samples, 1.19%)</title><rect x="185.6" y="611.0" width="14.0" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="188.6" y="622.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/DefaultRecordBatch.computeChecksum (2 samples, 1.19%)</title><rect x="185.6" y="595.0" width="14.0" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="188.6" y="606.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/Crc32C.compute (2 samples, 1.19%)</title><rect x="185.6" y="579.0" width="14.0" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="188.6" y="590.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/Checksums.update (2 samples, 1.19%)</title><rect x="185.6" y="563.0" width="14.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="188.6" y="574.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/PureJavaCrc32C.update (2 samples, 1.19%)</title><rect x="185.6" y="547.0" width="14.0" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="188.6" y="558.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/AbstractIterator.hasNext (1 samples, 0.60%)</title><rect x="199.6" y="643.0" width="7.1" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="202.6" y="654.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/utils/AbstractIterator.maybeComputeNext (1 samples, 0.60%)</title><rect x="199.6" y="627.0" width="7.1" height="15" fill="#60f160" rx="2" ry="2"/>
+<text x="202.6" y="638.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/RecordBatchIterator.makeNext (1 samples, 0.60%)</title><rect x="199.6" y="611.0" width="7.1" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="202.6" y="622.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/RecordBatchIterator.makeNext (1 samples, 0.60%)</title><rect x="199.6" y="595.0" width="7.1" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="202.6" y="606.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/ByteBufferLogInputStream.nextBatch (1 samples, 0.60%)</title><rect x="199.6" y="579.0" width="7.1" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="202.6" y="590.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/record/ByteBufferLogInputStream.nextBatch (1 samples, 0.60%)</title><rect x="199.6" y="563.0" width="7.1" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="202.6" y="574.0"></text>
+</g>
+<g>
+<title>java/lang/Integer.intValue (1 samples, 0.60%)</title><rect x="199.6" y="547.0" width="7.1" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="202.6" y="558.0"></text>
+</g>
+<g>
+<title>java/nio/HeapByteBuffer.slice (1 samples, 0.60%)</title><rect x="199.6" y="531.0" width="7.1" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="202.6" y="542.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.access$3500 (1 samples, 0.60%)</title><rect x="206.7" y="659.0" width="7.0" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="209.7" y="670.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.parseRecord (1 samples, 0.60%)</title><rect x="206.7" y="643.0" width="7.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="209.7" y="654.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.maybeLeaderEpoch (1 samples, 0.60%)</title><rect x="206.7" y="627.0" width="7.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="209.7" y="638.0"></text>
+</g>
+<g>
+<title>java/util/Optional.of (1 samples, 0.60%)</title><rect x="206.7" y="611.0" width="7.0" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="209.7" y="622.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.updateAssignmentMetadataIfNeeded (4 samples, 2.38%)</title><rect x="213.7" y="739.0" width="28.1" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="216.7" y="750.0">or..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/KafkaConsumer.updateFetchPositions (3 samples, 1.79%)</title><rect x="213.7" y="723.0" width="21.1" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="216.7" y="734.0">o..</text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.validateOffsetsIfNeeded (3 samples, 1.79%)</title><rect x="213.7" y="707.0" width="21.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="216.7" y="718.0">o..</text>
+</g>
+<g>
+<title>java/lang/Iterable.forEach (2 samples, 1.19%)</title><rect x="213.7" y="691.0" width="14.0" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="216.7" y="702.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$$Lambda$209/1180671232.accept (2 samples, 1.19%)</title><rect x="213.7" y="675.0" width="14.0" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="216.7" y="686.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.lambda$validateOffsetsIfNeeded$1 (2 samples, 1.19%)</title><rect x="213.7" y="659.0" width="14.0" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="216.7" y="670.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/Metadata.leaderAndEpoch (2 samples, 1.19%)</title><rect x="213.7" y="643.0" width="14.0" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="216.7" y="654.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/Metadata.partitionInfoIfCurrent (2 samples, 1.19%)</title><rect x="213.7" y="627.0" width="14.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="216.7" y="638.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/MetadataCache.getPartitionInfoHavingEpoch (2 samples, 1.19%)</title><rect x="213.7" y="611.0" width="14.0" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="216.7" y="622.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.get (1 samples, 0.60%)</title><rect x="213.7" y="595.0" width="7.0" height="15" fill="#59ea59" rx="2" ry="2"/>
+<text x="216.7" y="606.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.getNode (1 samples, 0.60%)</title><rect x="213.7" y="579.0" width="7.0" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="216.7" y="590.0"></text>
+</g>
+<g>
+<title>java/util/Optional.ofNullable (1 samples, 0.60%)</title><rect x="220.7" y="595.0" width="7.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="223.7" y="606.0"></text>
+</g>
+<g>
+<title>java/util/Optional.of (1 samples, 0.60%)</title><rect x="220.7" y="579.0" width="7.0" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="223.7" y="590.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/SubscriptionState.partitionsNeedingValidation (1 samples, 0.60%)</title><rect x="227.7" y="691.0" width="7.1" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="230.7" y="702.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/SubscriptionState.collectPartitions (1 samples, 0.60%)</title><rect x="227.7" y="675.0" width="7.1" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="230.7" y="686.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReferencePipeline.map (1 samples, 0.60%)</title><rect x="227.7" y="659.0" width="7.1" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="230.7" y="670.0"></text>
+</g>
+<g>
+<title>java/util/stream/ReferencePipeline$3.&lt;init&gt; (1 samples, 0.60%)</title><rect x="227.7" y="643.0" width="7.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="230.7" y="654.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/ConsumerCoordinator.poll (1 samples, 0.60%)</title><rect x="234.8" y="723.0" width="7.0" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="237.8" y="734.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/AbstractCoordinator.pollHeartbeat (1 samples, 0.60%)</title><rect x="234.8" y="707.0" width="7.0" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="237.8" y="718.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/AbstractCoordinator$HeartbeatThread.access$000 (1 samples, 0.60%)</title><rect x="234.8" y="691.0" width="7.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="237.8" y="702.0"></text>
+</g>
+<g>
+<title>Runtime1::counter_overflow(JavaThread*, int, Method*) (1 samples, 0.60%)</title><rect x="234.8" y="675.0" width="7.0" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="237.8" y="686.0"></text>
+</g>
+<g>
+<title>SimpleThresholdPolicy::event(methodHandle, methodHandle, int, int, CompLevel, nmethod*, JavaThread*) (1 samples, 0.60%)</title><rect x="234.8" y="659.0" width="7.0" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="237.8" y="670.0"></text>
+</g>
+<g>
+<title>AdvancedThresholdPolicy::method_invocation_event(methodHandle, methodHandle, CompLevel, nmethod*, JavaThread*) (1 samples, 0.60%)</title><rect x="234.8" y="643.0" width="7.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="237.8" y="654.0"></text>
+</g>
+<g>
+<title>AdvancedThresholdPolicy::call_event(Method*, CompLevel) (1 samples, 0.60%)</title><rect x="234.8" y="627.0" width="7.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="237.8" y="638.0"></text>
+</g>
+<g>
+<title>Method::backedge_count() (1 samples, 0.60%)</title><rect x="234.8" y="611.0" width="7.0" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="237.8" y="622.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/ConsumerNetworkClient.transmitSends (1 samples, 0.60%)</title><rect x="241.8" y="739.0" width="7.0" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="244.8" y="750.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/NetworkClient.poll (1 samples, 0.60%)</title><rect x="241.8" y="723.0" width="7.0" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="244.8" y="734.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/network/Selector.poll (1 samples, 0.60%)</title><rect x="241.8" y="707.0" width="7.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="244.8" y="718.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/network/Selector.pollSelectionKeys (1 samples, 0.60%)</title><rect x="241.8" y="691.0" width="7.0" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="244.8" y="702.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/common/network/PlaintextChannelBuilder$PlaintextAuthenticator.complete (1 samples, 0.60%)</title><rect x="241.8" y="675.0" width="7.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="244.8" y="686.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.sendFetches (2 samples, 1.19%)</title><rect x="248.8" y="739.0" width="14.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="251.8" y="750.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$FetchManagerMetrics.access$100 (1 samples, 0.60%)</title><rect x="248.8" y="723.0" width="7.0" height="15" fill="#5ced5c" rx="2" ry="2"/>
+<text x="251.8" y="734.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher$FetchManagerMetrics.maybeUpdateAssignment (1 samples, 0.60%)</title><rect x="248.8" y="707.0" width="7.0" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="251.8" y="718.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/SubscriptionState.assignedPartitions (1 samples, 0.60%)</title><rect x="248.8" y="691.0" width="7.0" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="251.8" y="702.0"></text>
+</g>
+<g>
+<title>org/apache/kafka/clients/consumer/internals/Fetcher.prepareFetchRequests (1 samples, 0.60%)</title><rect x="255.8" y="723.0" width="7.1" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="258.8" y="734.0"></text>
+</g>
+<g>
+<title>java/util/HashSet.contains (1 samples, 0.60%)</title><rect x="255.8" y="707.0" width="7.1" height="15" fill="#59ea59" rx="2" ry="2"/>
+<text x="258.8" y="718.0"></text>
+</g>
+<g>
+<title>java/lang/Integer.hashCode (1 samples, 0.60%)</title><rect x="255.8" y="691.0" width="7.1" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="258.8" y="702.0"></text>
+</g>
+<g>
+<title>java/lang/Thread.run (63 samples, 37.50%)</title><rect x="262.9" y="803.0" width="442.5" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="265.9" y="814.0">java/lang/Thread.run</text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.run (63 samples, 37.50%)</title><rect x="262.9" y="787.0" width="442.5" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="265.9" y="798.0">java/util/concurrent/ThreadPoolExecutor$Worker.run</text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor.runWorker (63 samples, 37.50%)</title><rect x="262.9" y="771.0" width="442.5" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="265.9" y="782.0">java/util/concurrent/ThreadPoolExecutor.runWorker</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit$$Lambda$261/1764063625.run (38 samples, 22.62%)</title><rect x="269.9" y="755.0" width="266.9" height="15" fill="#60f160" rx="2" ry="2"/>
+<text x="272.9" y="766.0">com/linecorp/decaton/processor/runti..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit.lambda$putTask$0 (38 samples, 22.62%)</title><rect x="269.9" y="739.0" width="266.9" height="15" fill="#5ced5c" rx="2" ry="2"/>
+<text x="272.9" y="750.0">com/linecorp/decaton/processor/runti..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessorUnit.processTask (38 samples, 22.62%)</title><rect x="269.9" y="723.0" width="266.9" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="272.9" y="734.0">com/linecorp/decaton/processor/runti..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.scheduleThenProcess (37 samples, 22.02%)</title><rect x="269.9" y="707.0" width="259.9" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="272.9" y="718.0">com/linecorp/decaton/processor/runt..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.extract (14 samples, 8.33%)</title><rect x="276.9" y="691.0" width="98.3" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="279.9" y="702.0">com/linecorp..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner$$Lambda$41/1384010761.extract (14 samples, 8.33%)</title><rect x="276.9" y="675.0" width="98.3" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="279.9" y="686.0">com/linecorp..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner.lambda$init$0 (14 samples, 8.33%)</title><rect x="276.9" y="659.0" width="98.3" height="15" fill="#5eef5e" rx="2" ry="2"/>
+<text x="279.9" y="670.0">com/linecorp..</text>
+</g>
+<g>
+<title>__clock_gettime (1 samples, 0.60%)</title><rect x="283.9" y="643.0" width="7.1" height="15" fill="#f77878" rx="2" ry="2"/>
+<text x="286.9" y="654.0"></text>
+</g>
+<g>
+<title>[vdso] (1 samples, 0.60%)</title><rect x="283.9" y="627.0" width="7.1" height="15" fill="#fe8181" rx="2" ry="2"/>
+<text x="286.9" y="638.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Task$KafkaDeserializer.deserialize (12 samples, 7.14%)</title><rect x="291.0" y="643.0" width="84.2" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="294.0" y="654.0">com/lineco..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Task$KafkaDeserializer.deserialize (12 samples, 7.14%)</title><rect x="291.0" y="627.0" width="84.2" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="294.0" y="638.0">com/lineco..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/ObjectMapper.readValue (12 samples, 7.14%)</title><rect x="291.0" y="611.0" width="84.2" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="294.0" y="622.0">com/faster..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/JsonFactory.createParser (4 samples, 2.38%)</title><rect x="291.0" y="595.0" width="28.0" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="294.0" y="606.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/JsonFactory._createParser (4 samples, 2.38%)</title><rect x="291.0" y="579.0" width="28.0" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="294.0" y="590.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/json/ByteSourceJsonBootstrapper.constructParser (4 samples, 2.38%)</title><rect x="291.0" y="563.0" width="28.0" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="294.0" y="574.0">co..</text>
+</g>
+<g>
+<title>OptoRuntime::new_instance_C(Klass*, JavaThread*) (1 samples, 0.60%)</title><rect x="291.0" y="547.0" width="7.0" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="294.0" y="558.0"></text>
+</g>
+<g>
+<title>InstanceKlass::allocate_instance(Thread*) (1 samples, 0.60%)</title><rect x="291.0" y="531.0" width="7.0" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="294.0" y="542.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/json/ByteSourceJsonBootstrapper.detectEncoding (1 samples, 0.60%)</title><rect x="298.0" y="547.0" width="7.0" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="301.0" y="558.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/json/ByteSourceJsonBootstrapper.handleBOM (1 samples, 0.60%)</title><rect x="298.0" y="531.0" width="7.0" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="301.0" y="542.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/json/UTF8StreamJsonParser.&lt;init&gt; (2 samples, 1.19%)</title><rect x="305.0" y="547.0" width="14.0" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="308.0" y="558.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/base/ParserBase.&lt;init&gt; (2 samples, 1.19%)</title><rect x="305.0" y="531.0" width="14.0" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="308.0" y="542.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/json/JsonReadContext.createRootContext (2 samples, 1.19%)</title><rect x="305.0" y="515.0" width="14.0" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="308.0" y="526.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/json/JsonReadContext.&lt;init&gt; (2 samples, 1.19%)</title><rect x="305.0" y="499.0" width="14.0" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="308.0" y="510.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/core/JsonStreamContext.&lt;init&gt; (2 samples, 1.19%)</title><rect x="305.0" y="483.0" width="14.0" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="308.0" y="494.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/ObjectMapper._readMapAndClose (5 samples, 2.98%)</title><rect x="319.0" y="595.0" width="35.2" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="322.0" y="606.0">com..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/ObjectMapper.createDeserializationContext (1 samples, 0.60%)</title><rect x="319.0" y="579.0" width="7.1" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="322.0" y="590.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/DefaultDeserializationContext$Impl.createInstance (1 samples, 0.60%)</title><rect x="319.0" y="563.0" width="7.1" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="322.0" y="574.0"></text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/BeanDeserializer.deserialize (4 samples, 2.38%)</title><rect x="326.1" y="579.0" width="28.1" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="329.1" y="590.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/BeanDeserializer.deserializeFromObject (4 samples, 2.38%)</title><rect x="326.1" y="563.0" width="28.1" height="15" fill="#55e655" rx="2" ry="2"/>
+<text x="329.1" y="574.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/BeanDeserializerBase.deserializeFromObjectUsingNonDefault (4 samples, 2.38%)</title><rect x="326.1" y="547.0" width="28.1" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="329.1" y="558.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/BeanDeserializer._deserializeUsingPropertyBased (4 samples, 2.38%)</title><rect x="326.1" y="531.0" width="28.1" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="329.1" y="542.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/BeanDeserializer._deserializeWithErrorWrapping (4 samples, 2.38%)</title><rect x="326.1" y="515.0" width="28.1" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="329.1" y="526.0">co..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/SettableBeanProperty.deserialize (3 samples, 1.79%)</title><rect x="333.1" y="499.0" width="21.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="336.1" y="510.0">c..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/std/NumberDeserializers$LongDeserializer.deserialize (3 samples, 1.79%)</title><rect x="333.1" y="483.0" width="21.1" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="336.1" y="494.0">c..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/deser/std/NumberDeserializers$LongDeserializer.deserialize (3 samples, 1.79%)</title><rect x="333.1" y="467.0" width="21.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="336.1" y="478.0">c..</text>
+</g>
+<g>
+<title>java/lang/Long.valueOf (3 samples, 1.79%)</title><rect x="333.1" y="451.0" width="21.1" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="336.1" y="462.0">j..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/type/TypeFactory.constructType (3 samples, 1.79%)</title><rect x="354.2" y="595.0" width="21.0" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="357.2" y="606.0">c..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/type/TypeFactory._fromAny (3 samples, 1.79%)</title><rect x="354.2" y="579.0" width="21.0" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="357.2" y="590.0">c..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/type/TypeFactory._fromClass (3 samples, 1.79%)</title><rect x="354.2" y="563.0" width="21.0" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="357.2" y="574.0">c..</text>
+</g>
+<g>
+<title>com/fasterxml/jackson/databind/util/LRUMap.get (3 samples, 1.79%)</title><rect x="354.2" y="547.0" width="21.0" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="357.2" y="558.0">c..</text>
+</g>
+<g>
+<title>java/util/concurrent/ConcurrentHashMap.get (3 samples, 1.79%)</title><rect x="354.2" y="531.0" width="21.0" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="357.2" y="542.0">j..</text>
+</g>
+<g>
+<title>java/lang/Object.&lt;init&gt; (1 samples, 0.60%)</title><rect x="368.2" y="515.0" width="7.0" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="371.2" y="526.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.process (19 samples, 11.31%)</title><rect x="375.2" y="691.0" width="133.5" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="378.2" y="702.0">com/linecorp/deca..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/LoggingContext.close (3 samples, 1.79%)</title><rect x="375.2" y="675.0" width="21.1" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="378.2" y="686.0">c..</text>
+</g>
+<g>
+<title>org/slf4j/MDC.remove (3 samples, 1.79%)</title><rect x="375.2" y="659.0" width="21.1" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="378.2" y="670.0">o..</text>
+</g>
+<g>
+<title>ch/qos/logback/classic/util/LogbackMDCAdapter.remove (3 samples, 1.79%)</title><rect x="375.2" y="643.0" width="21.1" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="378.2" y="654.0">c..</text>
+</g>
+<g>
+<title>java/lang/ThreadLocal.get (2 samples, 1.19%)</title><rect x="375.2" y="627.0" width="14.1" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="378.2" y="638.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal.setInitialValue (2 samples, 1.19%)</title><rect x="375.2" y="611.0" width="14.1" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="378.2" y="622.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal$ThreadLocalMap.access$100 (1 samples, 0.60%)</title><rect x="382.3" y="595.0" width="7.0" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="385.3" y="606.0"></text>
+</g>
+<g>
+<title>java/util/Collections$SynchronizedMap.remove (1 samples, 0.60%)</title><rect x="389.3" y="627.0" width="7.0" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="392.3" y="638.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.remove (1 samples, 0.60%)</title><rect x="389.3" y="611.0" width="7.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="392.3" y="622.0"></text>
+</g>
+<g>
+<title>java/util/HashMap.removeNode (1 samples, 0.60%)</title><rect x="389.3" y="595.0" width="7.0" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="392.3" y="606.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessingContextImpl.loggingContext (9 samples, 5.36%)</title><rect x="396.3" y="675.0" width="63.2" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="399.3" y="686.0">com/lin..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/LoggingContext.&lt;init&gt; (9 samples, 5.36%)</title><rect x="396.3" y="659.0" width="63.2" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="399.3" y="670.0">com/lin..</text>
+</g>
+<g>
+<title>I2C/C2I adapters (1 samples, 0.60%)</title><rect x="396.3" y="643.0" width="7.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="399.3" y="654.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/TaskMetadata.toString (2 samples, 1.19%)</title><rect x="403.3" y="643.0" width="14.1" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="406.3" y="654.0"></text>
+</g>
+<g>
+<title>java/lang/StringBuilder.append (1 samples, 0.60%)</title><rect x="410.4" y="627.0" width="7.0" height="15" fill="#50e150" rx="2" ry="2"/>
+<text x="413.4" y="638.0"></text>
+</g>
+<g>
+<title>java/lang/AbstractStringBuilder.append (1 samples, 0.60%)</title><rect x="410.4" y="611.0" width="7.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="413.4" y="622.0"></text>
+</g>
+<g>
+<title>jlong_disjoint_arraycopy (1 samples, 0.60%)</title><rect x="410.4" y="595.0" width="7.0" height="15" fill="#f27171" rx="2" ry="2"/>
+<text x="413.4" y="606.0"></text>
+</g>
+<g>
+<title>jlong_disjoint_arraycopy (1 samples, 0.60%)</title><rect x="417.4" y="643.0" width="7.0" height="15" fill="#e66161" rx="2" ry="2"/>
+<text x="420.4" y="654.0"></text>
+</g>
+<g>
+<title>org/slf4j/MDC.put (5 samples, 2.98%)</title><rect x="424.4" y="643.0" width="35.1" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="427.4" y="654.0">org..</text>
+</g>
+<g>
+<title>ch/qos/logback/classic/util/LogbackMDCAdapter.put (5 samples, 2.98%)</title><rect x="424.4" y="627.0" width="35.1" height="15" fill="#5bec5b" rx="2" ry="2"/>
+<text x="427.4" y="638.0">ch/..</text>
+</g>
+<g>
+<title>ch/qos/logback/classic/util/LogbackMDCAdapter.getAndSetLastOperation (1 samples, 0.60%)</title><rect x="424.4" y="611.0" width="7.0" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="427.4" y="622.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal.set (1 samples, 0.60%)</title><rect x="424.4" y="595.0" width="7.0" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="427.4" y="606.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal$ThreadLocalMap.access$100 (1 samples, 0.60%)</title><rect x="424.4" y="579.0" width="7.0" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="427.4" y="590.0"></text>
+</g>
+<g>
+<title>java/lang/ThreadLocal$ThreadLocalMap.set (1 samples, 0.60%)</title><rect x="424.4" y="563.0" width="7.0" height="15" fill="#60f160" rx="2" ry="2"/>
+<text x="427.4" y="574.0"></text>
+</g>
+<g>
+<title>java/util/Collections$SynchronizedMap.put (4 samples, 2.38%)</title><rect x="431.4" y="611.0" width="28.1" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="434.4" y="622.0">ja..</text>
+</g>
+<g>
+<title>java/util/HashMap.put (3 samples, 1.79%)</title><rect x="438.5" y="595.0" width="21.0" height="15" fill="#5dee5d" rx="2" ry="2"/>
+<text x="441.5" y="606.0">j..</text>
+</g>
+<g>
+<title>java/util/HashMap.putVal (3 samples, 1.79%)</title><rect x="438.5" y="579.0" width="21.0" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="441.5" y="590.0">j..</text>
+</g>
+<g>
+<title>java/util/HashMap.newNode (3 samples, 1.79%)</title><rect x="438.5" y="563.0" width="21.0" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="441.5" y="574.0">j..</text>
+</g>
+<g>
+<title>OptoRuntime::new_instance_C(Klass*, JavaThread*) (1 samples, 0.60%)</title><rect x="452.5" y="547.0" width="7.0" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="455.5" y="558.0"></text>
+</g>
+<g>
+<title>InstanceKlass::allocate_instance(Thread*) (1 samples, 0.60%)</title><rect x="452.5" y="531.0" width="7.0" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="455.5" y="542.0"></text>
+</g>
+<g>
+<title>CollectedHeap::allocate_from_tlab_slow(KlassHandle, Thread*, unsigned long) (1 samples, 0.60%)</title><rect x="452.5" y="515.0" width="7.0" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="455.5" y="526.0"></text>
+</g>
+<g>
+<title>G1OffsetTableContigSpace::free() const (1 samples, 0.60%)</title><rect x="452.5" y="499.0" width="7.0" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="455.5" y="510.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessingContextImpl.push (3 samples, 1.79%)</title><rect x="459.5" y="675.0" width="21.1" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="462.5" y="686.0">c..</text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessingContextImpl.pushDownStream (2 samples, 1.19%)</title><rect x="466.5" y="659.0" width="14.1" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="469.5" y="670.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner$$Lambda$199/1767753741.process (2 samples, 1.19%)</title><rect x="466.5" y="643.0" width="14.1" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="469.5" y="654.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/DecatonRunner.lambda$null$1 (2 samples, 1.19%)</title><rect x="466.5" y="627.0" width="14.1" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="469.5" y="638.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Recording.process (2 samples, 1.19%)</title><rect x="466.5" y="611.0" width="14.1" height="15" fill="#51e251" rx="2" ry="2"/>
+<text x="469.5" y="622.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/benchmark/Recording$ChildRecording.process (1 samples, 0.60%)</title><rect x="473.6" y="595.0" width="7.0" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="476.6" y="606.0"></text>
+</g>
+<g>
+<title>os::javaTimeMillis() (1 samples, 0.60%)</title><rect x="473.6" y="579.0" width="7.0" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="476.6" y="590.0"></text>
+</g>
+<g>
+<title>[vdso] (1 samples, 0.60%)</title><rect x="473.6" y="563.0" width="7.0" height="15" fill="#fc7f7f" rx="2" ry="2"/>
+<text x="476.6" y="574.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/Utils$Timer.duration (2 samples, 1.19%)</title><rect x="480.6" y="675.0" width="14.0" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="483.6" y="686.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/Utils$Timer.elapsedNanos (2 samples, 1.19%)</title><rect x="480.6" y="659.0" width="14.0" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="483.6" y="670.0"></text>
+</g>
+<g>
+<title>__clock_gettime (2 samples, 1.19%)</title><rect x="480.6" y="643.0" width="14.0" height="15" fill="#fe8181" rx="2" ry="2"/>
+<text x="483.6" y="654.0"></text>
+</g>
+<g>
+<title>[vdso] (2 samples, 1.19%)</title><rect x="480.6" y="627.0" width="14.0" height="15" fill="#f77777" rx="2" ry="2"/>
+<text x="483.6" y="638.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/CompletableFuture.whenComplete (1 samples, 0.60%)</title><rect x="494.6" y="675.0" width="7.1" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="497.6" y="686.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/CompletableFuture.uniWhenCompleteStage (1 samples, 0.60%)</title><rect x="494.6" y="659.0" width="7.1" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="497.6" y="670.0"></text>
+</g>
+<g>
+<title>jshort_disjoint_arraycopy (1 samples, 0.60%)</title><rect x="501.7" y="675.0" width="7.0" height="15" fill="#f57474" rx="2" ry="2"/>
+<text x="504.7" y="686.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/CompletableFuture.whenComplete (3 samples, 1.79%)</title><rect x="508.7" y="691.0" width="21.1" height="15" fill="#5eef5e" rx="2" ry="2"/>
+<text x="511.7" y="702.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/CompletableFuture.uniWhenCompleteStage (3 samples, 1.79%)</title><rect x="508.7" y="675.0" width="21.1" height="15" fill="#54e554" rx="2" ry="2"/>
+<text x="511.7" y="686.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/CompletableFuture.uniWhenComplete (1 samples, 0.60%)</title><rect x="522.7" y="659.0" width="7.1" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="525.7" y="670.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline$$Lambda$283/23219818.accept (1 samples, 0.60%)</title><rect x="522.7" y="643.0" width="7.1" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="525.7" y="654.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/ProcessPipeline.lambda$process$1 (1 samples, 0.60%)</title><rect x="522.7" y="627.0" width="7.1" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="525.7" y="638.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/Utils$Timer.duration (1 samples, 0.60%)</title><rect x="522.7" y="611.0" width="7.1" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="525.7" y="622.0"></text>
+</g>
+<g>
+<title>java/time/Duration.ofNanos (1 samples, 0.60%)</title><rect x="522.7" y="595.0" width="7.1" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="525.7" y="606.0"></text>
+</g>
+<g>
+<title>java/time/Duration.create (1 samples, 0.60%)</title><rect x="522.7" y="579.0" width="7.1" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="525.7" y="590.0"></text>
+</g>
+<g>
+<title>com/linecorp/decaton/processor/runtime/Utils.timer (1 samples, 0.60%)</title><rect x="529.8" y="707.0" width="7.0" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="532.8" y="718.0"></text>
+</g>
+<g>
+<title>__clock_gettime (1 samples, 0.60%)</title><rect x="529.8" y="691.0" width="7.0" height="15" fill="#f67676" rx="2" ry="2"/>
+<text x="532.8" y="702.0"></text>
+</g>
+<g>
+<title>[vdso] (1 samples, 0.60%)</title><rect x="529.8" y="675.0" width="7.0" height="15" fill="#ea6666" rx="2" ry="2"/>
+<text x="532.8" y="686.0"></text>
+</g>
+<g>
+<title>java/lang/Thread.interrupted (1 samples, 0.60%)</title><rect x="536.8" y="755.0" width="7.0" height="15" fill="#59ea59" rx="2" ry="2"/>
+<text x="539.8" y="766.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.lock (2 samples, 1.19%)</title><rect x="543.8" y="755.0" width="14.1" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="546.8" y="766.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.acquire (2 samples, 1.19%)</title><rect x="543.8" y="739.0" width="14.1" height="15" fill="#52e352" rx="2" ry="2"/>
+<text x="546.8" y="750.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.tryAcquire (1 samples, 0.60%)</title><rect x="543.8" y="723.0" width="7.0" height="15" fill="#62f362" rx="2" ry="2"/>
+<text x="546.8" y="734.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor.getTask (1 samples, 0.60%)</title><rect x="550.8" y="723.0" width="7.1" height="15" fill="#56e756" rx="2" ry="2"/>
+<text x="553.8" y="734.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor$Worker.unlock (1 samples, 0.60%)</title><rect x="557.9" y="755.0" width="7.0" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="560.9" y="766.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/ThreadPoolExecutor.getTask (20 samples, 11.90%)</title><rect x="564.9" y="755.0" width="140.5" height="15" fill="#5ff05f" rx="2" ry="2"/>
+<text x="567.9" y="766.0">java/util/concurre..</text>
+</g>
+<g>
+<title>java/util/concurrent/LinkedBlockingQueue.take (20 samples, 11.90%)</title><rect x="564.9" y="739.0" width="140.5" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="567.9" y="750.0">java/util/concurre..</text>
+</g>
+<g>
+<title>java/util/concurrent/LinkedBlockingQueue.dequeue (2 samples, 1.19%)</title><rect x="571.9" y="723.0" width="14.1" height="15" fill="#58e958" rx="2" ry="2"/>
+<text x="574.9" y="734.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer$ConditionObject.await (15 samples, 8.93%)</title><rect x="586.0" y="723.0" width="105.3" height="15" fill="#60f160" rx="2" ry="2"/>
+<text x="589.0" y="734.0">java/util/con..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer$ConditionObject.addConditionWaiter (1 samples, 0.60%)</title><rect x="593.0" y="707.0" width="7.0" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="596.0" y="718.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer$Node.&lt;init&gt; (1 samples, 0.60%)</title><rect x="593.0" y="691.0" width="7.0" height="15" fill="#53e453" rx="2" ry="2"/>
+<text x="596.0" y="702.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.acquireQueued (3 samples, 1.79%)</title><rect x="600.0" y="707.0" width="21.1" height="15" fill="#5eef5e" rx="2" ry="2"/>
+<text x="603.0" y="718.0">j..</text>
+</g>
+<g>
+<title>java/util/concurrent/locks/LockSupport.park (10 samples, 5.95%)</title><rect x="621.1" y="707.0" width="70.2" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="624.1" y="718.0">java/uti..</text>
+</g>
+<g>
+<title>sun/misc/Unsafe.park (10 samples, 5.95%)</title><rect x="621.1" y="691.0" width="70.2" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="624.1" y="702.0">sun/misc..</text>
+</g>
+<g>
+<title>Unsafe_Park (10 samples, 5.95%)</title><rect x="621.1" y="675.0" width="70.2" height="15" fill="#ee6c6c" rx="2" ry="2"/>
+<text x="624.1" y="686.0">Unsafe_P..</text>
+</g>
+<g>
+<title>ThreadStateTransition::transition_and_fence(JavaThread*, JavaThreadState, JavaThreadState) [clone .constprop.179] (1 samples, 0.60%)</title><rect x="621.1" y="659.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="624.1" y="670.0"></text>
+</g>
+<g>
+<title>__lll_unlock_wake (4 samples, 2.38%)</title><rect x="628.1" y="659.0" width="28.1" height="15" fill="#fa7b7b" rx="2" ry="2"/>
+<text x="631.1" y="670.0">__..</text>
+</g>
+<g>
+<title>__pthread_cond_wait (4 samples, 2.38%)</title><rect x="656.2" y="659.0" width="28.1" height="15" fill="#ee6b6b" rx="2" ry="2"/>
+<text x="659.2" y="670.0">__..</text>
+</g>
+<g>
+<title>__pthread_mutex_unlock_usercnt (1 samples, 0.60%)</title><rect x="684.3" y="659.0" width="7.0" height="15" fill="#e15a5a" rx="2" ry="2"/>
+<text x="687.3" y="670.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/ReentrantLock.lockInterruptibly (2 samples, 1.19%)</title><rect x="691.3" y="723.0" width="14.1" height="15" fill="#5aeb5a" rx="2" ry="2"/>
+<text x="694.3" y="734.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.acquireInterruptibly (2 samples, 1.19%)</title><rect x="691.3" y="707.0" width="14.1" height="15" fill="#61f261" rx="2" ry="2"/>
+<text x="694.3" y="718.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/ReentrantLock$NonfairSync.tryAcquire (2 samples, 1.19%)</title><rect x="691.3" y="691.0" width="14.1" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="694.3" y="702.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/ReentrantLock$Sync.nonfairTryAcquire (2 samples, 1.19%)</title><rect x="691.3" y="675.0" width="14.1" height="15" fill="#57e857" rx="2" ry="2"/>
+<text x="694.3" y="686.0"></text>
+</g>
+<g>
+<title>java/util/concurrent/locks/AbstractQueuedSynchronizer.compareAndSetState (1 samples, 0.60%)</title><rect x="698.3" y="659.0" width="7.1" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="701.3" y="670.0"></text>
+</g>
+<g>
+<title>start_thread (69 samples, 41.07%)</title><rect x="705.4" y="803.0" width="484.6" height="15" fill="#ef6d6d" rx="2" ry="2"/>
+<text x="708.4" y="814.0">start_thread</text>
+</g>
+<g>
+<title>java_start(Thread*) (69 samples, 41.07%)</title><rect x="705.4" y="787.0" width="484.6" height="15" fill="#ef6d6d" rx="2" ry="2"/>
+<text x="708.4" y="798.0">java_start(Thread*)</text>
+</g>
+<g>
+<title>GangWorker::loop() (11 samples, 6.55%)</title><rect x="705.4" y="771.0" width="77.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="708.4" y="782.0">GangWorke..</text>
+</g>
+<g>
+<title>G1ParTask::work(unsigned int) [clone .part.431] (11 samples, 6.55%)</title><rect x="705.4" y="755.0" width="77.2" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="708.4" y="766.0">G1ParTask..</text>
+</g>
+<g>
+<title>G1ParEvacuateFollowersClosure::do_void() (6 samples, 3.57%)</title><rect x="705.4" y="739.0" width="42.1" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="708.4" y="750.0">G1Pa..</text>
+</g>
+<g>
+<title>G1ParScanThreadState::trim_queue() (2 samples, 1.19%)</title><rect x="705.4" y="723.0" width="14.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="708.4" y="734.0"></text>
+</g>
+<g>
+<title>G1ParScanThreadState::copy_to_survivor_space(InCSetState, oopDesc*, markOopDesc*) (2 samples, 1.19%)</title><rect x="705.4" y="707.0" width="14.0" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="708.4" y="718.0"></text>
+</g>
+<g>
+<title>ObjArrayKlass::oop_oop_iterate_v(oopDesc*, ExtendedOopClosure*) (1 samples, 0.60%)</title><rect x="712.4" y="691.0" width="7.0" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="715.4" y="702.0"></text>
+</g>
+<g>
+<title>G1ParScanClosure::do_oop(unsigned int*) (1 samples, 0.60%)</title><rect x="712.4" y="675.0" width="7.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="715.4" y="686.0"></text>
+</g>
+<g>
+<title>GenericTaskQueueSet&lt;OverflowTaskQueue&lt;StarTask, (MemoryType)5, 131072u&gt;, (MemoryType)5&gt;::steal_best_of_2(unsigned int, int*, StarTask&amp;) (4 samples, 2.38%)</title><rect x="719.4" y="723.0" width="28.1" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="722.4" y="734.0">Ge..</text>
+</g>
+<g>
+<title>G1RootProcessor::evacuate_roots(OopClosure*, OopClosure*, CLDClosure*, CLDClosure*, bool, unsigned int) (3 samples, 1.79%)</title><rect x="747.5" y="739.0" width="21.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="750.5" y="750.0">G..</text>
+</g>
+<g>
+<title>ClassLoaderDataGraph::roots_cld_do(CLDClosure*, CLDClosure*) (1 samples, 0.60%)</title><rect x="747.5" y="723.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="750.5" y="734.0"></text>
+</g>
+<g>
+<title>ClassLoaderData::oops_do(OopClosure*, KlassClosure*, bool) (1 samples, 0.60%)</title><rect x="747.5" y="707.0" width="7.0" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="750.5" y="718.0"></text>
+</g>
+<g>
+<title>G1KlassScanClosure::do_klass(Klass*) (1 samples, 0.60%)</title><rect x="747.5" y="691.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="750.5" y="702.0"></text>
+</g>
+<g>
+<title>G1ParCopyClosure&lt;(G1Barrier)2, (G1Mark)0&gt;::do_oop(oopDesc**) (1 samples, 0.60%)</title><rect x="747.5" y="675.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="750.5" y="686.0"></text>
+</g>
+<g>
+<title>G1ParScanThreadState::copy_to_survivor_space(InCSetState, oopDesc*, markOopDesc*) (1 samples, 0.60%)</title><rect x="747.5" y="659.0" width="7.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="750.5" y="670.0"></text>
+</g>
+<g>
+<title>StringTable::possibly_parallel_oops_do(OopClosure*) (1 samples, 0.60%)</title><rect x="754.5" y="723.0" width="7.0" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="757.5" y="734.0"></text>
+</g>
+<g>
+<title>BufferingOopClosure::do_oop(oopDesc**) (1 samples, 0.60%)</title><rect x="754.5" y="707.0" width="7.0" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="757.5" y="718.0"></text>
+</g>
+<g>
+<title>G1ParCopyClosure&lt;(G1Barrier)0, (G1Mark)0&gt;::do_oop(oopDesc**) (1 samples, 0.60%)</title><rect x="754.5" y="691.0" width="7.0" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="757.5" y="702.0"></text>
+</g>
+<g>
+<title>G1ParScanThreadState::copy_to_survivor_space(InCSetState, oopDesc*, markOopDesc*) (1 samples, 0.60%)</title><rect x="754.5" y="675.0" width="7.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="757.5" y="686.0"></text>
+</g>
+<g>
+<title>void G1ParScanClosure::do_oop_nv&lt;unsigned int&gt;(unsigned int*) (1 samples, 0.60%)</title><rect x="754.5" y="659.0" width="7.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="757.5" y="670.0"></text>
+</g>
+<g>
+<title>Threads::possibly_parallel_oops_do(OopClosure*, CLDClosure*, CodeBlobClosure*) (1 samples, 0.60%)</title><rect x="761.5" y="723.0" width="7.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="764.5" y="734.0"></text>
+</g>
+<g>
+<title>JavaThread::oops_do(OopClosure*, CLDClosure*, CodeBlobClosure*) (1 samples, 0.60%)</title><rect x="761.5" y="707.0" width="7.1" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="764.5" y="718.0"></text>
+</g>
+<g>
+<title>frame::oops_do_internal(OopClosure*, CLDClosure*, CodeBlobClosure*, RegisterMap*, bool) (1 samples, 0.60%)</title><rect x="761.5" y="691.0" width="7.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="764.5" y="702.0"></text>
+</g>
+<g>
+<title>OopMapSet::oops_do(frame const*, RegisterMap const*, OopClosure*) (1 samples, 0.60%)</title><rect x="761.5" y="675.0" width="7.1" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="764.5" y="686.0"></text>
+</g>
+<g>
+<title>G1RootProcessor::scan_remembered_sets(G1ParPushHeapRSClosure*, OopClosure*, unsigned int) (2 samples, 1.19%)</title><rect x="768.6" y="739.0" width="14.0" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="771.6" y="750.0"></text>
+</g>
+<g>
+<title>G1RemSet::oops_into_collection_set_do(G1ParPushHeapRSClosure*, CodeBlobClosure*, unsigned int) (2 samples, 1.19%)</title><rect x="768.6" y="723.0" width="14.0" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="771.6" y="734.0"></text>
+</g>
+<g>
+<title>G1RemSet::scanRS(G1ParPushHeapRSClosure*, CodeBlobClosure*, unsigned int) (2 samples, 1.19%)</title><rect x="768.6" y="707.0" width="14.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="771.6" y="718.0"></text>
+</g>
+<g>
+<title>G1CollectedHeap::collection_set_iterate_from(HeapRegion*, HeapRegionClosure*) (2 samples, 1.19%)</title><rect x="768.6" y="691.0" width="14.0" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="771.6" y="702.0"></text>
+</g>
+<g>
+<title>ScanRSClosure::doHeapRegion(HeapRegion*) (2 samples, 1.19%)</title><rect x="768.6" y="675.0" width="14.0" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="771.6" y="686.0"></text>
+</g>
+<g>
+<title>G1CodeRootSet::nmethods_do(CodeBlobClosure*) const (2 samples, 1.19%)</title><rect x="768.6" y="659.0" width="14.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="771.6" y="670.0"></text>
+</g>
+<g>
+<title>nmethod::fix_oop_relocations(unsigned char*, unsigned char*, bool) (2 samples, 1.19%)</title><rect x="768.6" y="643.0" width="14.0" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="771.6" y="654.0"></text>
+</g>
+<g>
+<title>JavaThread::thread_main_inner() (58 samples, 34.52%)</title><rect x="782.6" y="771.0" width="407.4" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="785.6" y="782.0">JavaThread::thread_main_inner()</text>
+</g>
+<g>
+<title>CompileBroker::compiler_thread_loop() (58 samples, 34.52%)</title><rect x="782.6" y="755.0" width="407.4" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="785.6" y="766.0">CompileBroker::compiler_thread_loop()</text>
+</g>
+<g>
+<title>CompileBroker::invoke_compiler_on_method(CompileTask*) (58 samples, 34.52%)</title><rect x="782.6" y="739.0" width="407.4" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="785.6" y="750.0">CompileBroker::invoke_compiler_on_method(CompileTask*)</text>
+</g>
+<g>
+<title>C2Compiler::compile_method(ciEnv*, ciMethod*, int) (56 samples, 33.33%)</title><rect x="782.6" y="723.0" width="393.4" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="785.6" y="734.0">C2Compiler::compile_method(ciEnv*, ciMethod*, int)</text>
+</g>
+<g>
+<title>Compile::Compile(ciEnv*, C2Compiler*, ciMethod*, int, bool, bool, bool) (56 samples, 33.33%)</title><rect x="782.6" y="707.0" width="393.4" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="785.6" y="718.0">Compile::Compile(ciEnv*, C2Compiler*, ciMethod*, int, ..</text>
+</g>
+<g>
+<title>Compile::Code_Gen() (35 samples, 20.83%)</title><rect x="782.6" y="691.0" width="245.9" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="785.6" y="702.0">Compile::Code_Gen()</text>
+</g>
+<g>
+<title>Compile::Output() (1 samples, 0.60%)</title><rect x="782.6" y="675.0" width="7.0" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="785.6" y="686.0"></text>
+</g>
+<g>
+<title>Compile::init_buffer(unsigned int*) (1 samples, 0.60%)</title><rect x="782.6" y="659.0" width="7.0" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="785.6" y="670.0"></text>
+</g>
+<g>
+<title>Block::code_alignment() (1 samples, 0.60%)</title><rect x="782.6" y="643.0" width="7.0" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="785.6" y="654.0"></text>
+</g>
+<g>
+<title>Compile::fill_buffer(CodeBuffer*, unsigned int*) (2 samples, 1.19%)</title><rect x="789.6" y="675.0" width="14.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="792.6" y="686.0"></text>
+</g>
+<g>
+<title>JVMState::same_calls_as(JVMState const*) const (1 samples, 0.60%)</title><rect x="789.6" y="659.0" width="7.1" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="792.6" y="670.0"></text>
+</g>
+<g>
+<title>prefetchAllocNode::emit(CodeBuffer&amp;, PhaseRegAlloc*) const (1 samples, 0.60%)</title><rect x="796.7" y="659.0" width="7.0" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="799.7" y="670.0"></text>
+</g>
+<g>
+<title>Address::make_raw(int, int, int, int, relocInfo::relocType) (1 samples, 0.60%)</title><rect x="796.7" y="643.0" width="7.0" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="799.7" y="654.0"></text>
+</g>
+<g>
+<title>Compile::valid_bundle_info(Node const*) (1 samples, 0.60%)</title><rect x="803.7" y="675.0" width="7.0" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="806.7" y="686.0"></text>
+</g>
+<g>
+<title>Matcher::match() (3 samples, 1.79%)</title><rect x="810.7" y="675.0" width="21.1" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="813.7" y="686.0">M..</text>
+</g>
+<g>
+<title>Matcher::xform(Node*, int) (3 samples, 1.79%)</title><rect x="810.7" y="659.0" width="21.1" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="813.7" y="670.0">M..</text>
+</g>
+<g>
+<title>Matcher::match_tree(Node const*) (2 samples, 1.19%)</title><rect x="817.7" y="643.0" width="14.1" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="820.7" y="654.0"></text>
+</g>
+<g>
+<title>Matcher::Label_Root(Node const*, State*, Node*, Node const*) (1 samples, 0.60%)</title><rect x="817.7" y="627.0" width="7.1" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="820.7" y="638.0"></text>
+</g>
+<g>
+<title>Matcher::Label_Root(Node const*, State*, Node*, Node const*) (1 samples, 0.60%)</title><rect x="817.7" y="611.0" width="7.1" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="820.7" y="622.0"></text>
+</g>
+<g>
+<title>Matcher::Label_Root(Node const*, State*, Node*, Node const*) (1 samples, 0.60%)</title><rect x="817.7" y="595.0" width="7.1" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="820.7" y="606.0"></text>
+</g>
+<g>
+<title>State::DFA(int, Node const*) (1 samples, 0.60%)</title><rect x="817.7" y="579.0" width="7.1" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="820.7" y="590.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst(State*, int, Node*&amp;) (1 samples, 0.60%)</title><rect x="824.8" y="627.0" width="7.0" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="827.8" y="638.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst_Interior(State*, int, Node*&amp;, MachNode*, unsigned int) (1 samples, 0.60%)</title><rect x="824.8" y="611.0" width="7.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="827.8" y="622.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceOper(State*, int, Node*&amp;, MachNode*) (1 samples, 0.60%)</title><rect x="824.8" y="595.0" width="7.0" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="827.8" y="606.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceOper(State*, int, Node*&amp;, MachNode*) (1 samples, 0.60%)</title><rect x="824.8" y="579.0" width="7.0" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="827.8" y="590.0"></text>
+</g>
+<g>
+<title>Matcher::ReduceInst(State*, int, Node*&amp;) (1 samples, 0.60%)</title><rect x="824.8" y="563.0" width="7.0" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="827.8" y="574.0"></text>
+</g>
+<g>
+<title>State::MachNodeGenerator(int, Compile*) (1 samples, 0.60%)</title><rect x="824.8" y="547.0" width="7.0" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="827.8" y="558.0"></text>
+</g>
+<g>
+<title>Arena::Amalloc_D(unsigned long, AllocFailStrategy::AllocFailEnum) (1 samples, 0.60%)</title><rect x="824.8" y="531.0" width="7.0" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="827.8" y="542.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::Register_Allocate() (28 samples, 16.67%)</title><rect x="831.8" y="675.0" width="196.7" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="834.8" y="686.0">PhaseChaitin::Register_All..</text>
+</g>
+<g>
+<title>PhaseAggressiveCoalesce::insert_copies(Matcher&amp;) (1 samples, 0.60%)</title><rect x="831.8" y="659.0" width="7.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="834.8" y="670.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::Simplify() (1 samples, 0.60%)</title><rect x="838.8" y="659.0" width="7.0" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="841.8" y="670.0"></text>
+</g>
+<g>
+<title>PhaseIFG::remove_node(unsigned int) (1 samples, 0.60%)</title><rect x="838.8" y="643.0" width="7.0" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="841.8" y="654.0"></text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (1 samples, 0.60%)</title><rect x="838.8" y="627.0" width="7.0" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="841.8" y="638.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::Split(unsigned int, ResourceArea*) (4 samples, 2.38%)</title><rect x="845.8" y="659.0" width="28.1" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="848.8" y="670.0">Ph..</text>
+</g>
+<g>
+<title>PhaseChaitin::split_Rematerialize(Node*, Block*, unsigned int, unsigned int&amp;, GrowableArray&lt;unsigned int&gt;, int, unsigned int*, Node**, bool) (1 samples, 0.60%)</title><rect x="866.9" y="643.0" width="7.0" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="869.9" y="654.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::clone_projs(Block*, unsigned int, Node*, Node*, unsigned int&amp;) (1 samples, 0.60%)</title><rect x="866.9" y="627.0" width="7.0" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="869.9" y="638.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::build_ifg_physical(ResourceArea*) (7 samples, 4.17%)</title><rect x="873.9" y="659.0" width="49.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="876.9" y="670.0">Phase..</text>
+</g>
+<g>
+<title>PhaseChaitin::interfere_with_live(unsigned int, IndexSet*) (4 samples, 2.38%)</title><rect x="888.0" y="643.0" width="28.1" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="891.0" y="654.0">Ph..</text>
+</g>
+<g>
+<title>IndexSetIterator::advance_and_next() (2 samples, 1.19%)</title><rect x="902.0" y="627.0" width="14.1" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="905.0" y="638.0"></text>
+</g>
+<g>
+<title>RegMask::smear_to_sets(int) (1 samples, 0.60%)</title><rect x="916.1" y="643.0" width="7.0" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="919.1" y="654.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::gather_lrg_masks(bool) [clone .constprop.214] (1 samples, 0.60%)</title><rect x="923.1" y="659.0" width="7.0" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="926.1" y="670.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::gather_lrg_masks(bool) [clone .constprop.215] (2 samples, 1.19%)</title><rect x="930.1" y="659.0" width="14.1" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="933.1" y="670.0"></text>
+</g>
+<g>
+<title>MachSpillCopyNode::ideal_reg() const (1 samples, 0.60%)</title><rect x="937.1" y="643.0" width="7.1" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="940.1" y="654.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::post_allocate_copy_removal() (1 samples, 0.60%)</title><rect x="944.2" y="659.0" width="7.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="947.2" y="670.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::yank_if_dead_recurse(Node*, Node*, Block*, Node_List*, Node_List*) (1 samples, 0.60%)</title><rect x="944.2" y="643.0" width="7.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="947.2" y="654.0"></text>
+</g>
+<g>
+<title>PhaseChaitin::yank(Node*, Block*, Node_List*, Node_List*) (1 samples, 0.60%)</title><rect x="944.2" y="627.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="947.2" y="638.0"></text>
+</g>
+<g>
+<title>Block::find_remove(Node const*) (1 samples, 0.60%)</title><rect x="944.2" y="611.0" width="7.0" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="947.2" y="622.0"></text>
+</g>
+<g>
+<title>PhaseCoalesce::coalesce_driver() (3 samples, 1.79%)</title><rect x="951.2" y="659.0" width="21.1" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="954.2" y="670.0">P..</text>
+</g>
+<g>
+<title>PhaseAggressiveCoalesce::coalesce(Block*) (2 samples, 1.19%)</title><rect x="951.2" y="643.0" width="14.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="954.2" y="654.0"></text>
+</g>
+<g>
+<title>PhaseCoalesce::combine_these_two(Node*, Node*) (1 samples, 0.60%)</title><rect x="958.2" y="627.0" width="7.0" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="961.2" y="638.0"></text>
+</g>
+<g>
+<title>PhaseConservativeCoalesce::coalesce(Block*) (1 samples, 0.60%)</title><rect x="965.2" y="643.0" width="7.1" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="968.2" y="654.0"></text>
+</g>
+<g>
+<title>PhaseConservativeCoalesce::copy_copy(Node*, Node*, Block*, unsigned int) (1 samples, 0.60%)</title><rect x="965.2" y="627.0" width="7.1" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="968.2" y="638.0"></text>
+</g>
+<g>
+<title>IndexSet::lrg_union(unsigned int, unsigned int, unsigned int, PhaseIFG const*, RegMask const&amp;) (1 samples, 0.60%)</title><rect x="965.2" y="611.0" width="7.1" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="968.2" y="622.0"></text>
+</g>
+<g>
+<title>PhaseIFG::Compute_Effective_Degree() (1 samples, 0.60%)</title><rect x="972.3" y="659.0" width="7.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="975.3" y="670.0"></text>
+</g>
+<g>
+<title>PhaseIFG::init(unsigned int) (2 samples, 1.19%)</title><rect x="979.3" y="659.0" width="14.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="982.3" y="670.0"></text>
+</g>
+<g>
+<title>PhaseLive::compute(unsigned int) (3 samples, 1.79%)</title><rect x="993.3" y="659.0" width="21.1" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="996.3" y="670.0">P..</text>
+</g>
+<g>
+<title>PhaseLive::add_liveout(Block*, IndexSet*, VectorSet&amp;) (1 samples, 0.60%)</title><rect x="1000.4" y="643.0" width="7.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="1003.4" y="654.0"></text>
+</g>
+<g>
+<title>pthread_getspecific (1 samples, 0.60%)</title><rect x="1007.4" y="643.0" width="7.0" height="15" fill="#fc7e7e" rx="2" ry="2"/>
+<text x="1010.4" y="654.0"></text>
+</g>
+<g>
+<title>RegMask::is_bound1() const (1 samples, 0.60%)</title><rect x="1014.4" y="659.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1017.4" y="670.0"></text>
+</g>
+<g>
+<title>RegMask::is_vector(unsigned int) (1 samples, 0.60%)</title><rect x="1021.4" y="659.0" width="7.1" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1024.4" y="670.0"></text>
+</g>
+<g>
+<title>Compile::Optimize() (15 samples, 8.93%)</title><rect x="1028.5" y="691.0" width="105.3" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1031.5" y="702.0">Compile::Opti..</text>
+</g>
+<g>
+<title>ConnectionGraph::do_analysis(Compile*, PhaseIterGVN*) (1 samples, 0.60%)</title><rect x="1028.5" y="675.0" width="7.0" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1031.5" y="686.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::compute_escape() (1 samples, 0.60%)</title><rect x="1028.5" y="659.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1031.5" y="670.0"></text>
+</g>
+<g>
+<title>ConnectionGraph::split_unique_types(GrowableArray&lt;Node*&gt;&amp;) (1 samples, 0.60%)</title><rect x="1028.5" y="643.0" width="7.0" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1031.5" y="654.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::add_users_to_worklist(Node*) (1 samples, 0.60%)</title><rect x="1028.5" y="627.0" width="7.0" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1031.5" y="638.0"></text>
+</g>
+<g>
+<title>PhaseCCP::analyze() (1 samples, 0.60%)</title><rect x="1035.5" y="675.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1038.5" y="686.0"></text>
+</g>
+<g>
+<title>Type::hashcons() (1 samples, 0.60%)</title><rect x="1035.5" y="659.0" width="7.0" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1038.5" y="670.0"></text>
+</g>
+<g>
+<title>Dict::Insert(void*, void*, bool) (1 samples, 0.60%)</title><rect x="1035.5" y="643.0" width="7.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1038.5" y="654.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_and_optimize(bool, bool) (9 samples, 5.36%)</title><rect x="1042.5" y="675.0" width="63.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1045.5" y="686.0">PhaseId..</text>
+</g>
+<g>
+<title>IdealLoopTree::iteration_split(PhaseIdealLoop*, Node_List&amp;) (1 samples, 0.60%)</title><rect x="1042.5" y="659.0" width="7.0" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="1045.5" y="670.0"></text>
+</g>
+<g>
+<title>IdealLoopTree::iteration_split(PhaseIdealLoop*, Node_List&amp;) (1 samples, 0.60%)</title><rect x="1042.5" y="643.0" width="7.0" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1045.5" y="654.0"></text>
+</g>
+<g>
+<title>IdealLoopTree::iteration_split(PhaseIdealLoop*, Node_List&amp;) (1 samples, 0.60%)</title><rect x="1042.5" y="627.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1045.5" y="638.0"></text>
+</g>
+<g>
+<title>IdealLoopTree::iteration_split(PhaseIdealLoop*, Node_List&amp;) (1 samples, 0.60%)</title><rect x="1042.5" y="611.0" width="7.0" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="1045.5" y="622.0"></text>
+</g>
+<g>
+<title>IdealLoopTree::iteration_split(PhaseIdealLoop*, Node_List&amp;) (1 samples, 0.60%)</title><rect x="1042.5" y="595.0" width="7.0" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1045.5" y="606.0"></text>
+</g>
+<g>
+<title>IdealLoopTree::iteration_split_impl(PhaseIdealLoop*, Node_List&amp;) (1 samples, 0.60%)</title><rect x="1042.5" y="579.0" width="7.0" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1045.5" y="590.0"></text>
+</g>
+<g>
+<title>IdealLoopTree::policy_range_check(PhaseIdealLoop*) const (1 samples, 0.60%)</title><rect x="1042.5" y="563.0" width="7.0" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1045.5" y="574.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::Dominators() (1 samples, 0.60%)</title><rect x="1049.5" y="659.0" width="7.0" height="15" fill="#e4e445" rx="2" ry="2"/>
+<text x="1052.5" y="670.0"></text>
+</g>
+<g>
+<title>NTarjan::DFS(NTarjan*, VectorSet&amp;, PhaseIdealLoop*, unsigned int*) (1 samples, 0.60%)</title><rect x="1049.5" y="643.0" width="7.0" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1052.5" y="654.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_early(VectorSet&amp;, Node_List&amp;, Node_Stack&amp;) (1 samples, 0.60%)</title><rect x="1056.5" y="659.0" width="7.1" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1059.5" y="670.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_late(VectorSet&amp;, Node_List&amp;, Node_Stack&amp;) (4 samples, 2.38%)</title><rect x="1063.6" y="659.0" width="28.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1066.6" y="670.0">Ph..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::build_loop_late_post(Node*) (4 samples, 2.38%)</title><rect x="1063.6" y="643.0" width="28.1" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="1066.6" y="654.0">Ph..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::get_late_ctrl(Node*, Node*) (3 samples, 1.79%)</title><rect x="1070.6" y="627.0" width="21.1" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1073.6" y="638.0">P..</text>
+</g>
+<g>
+<title>PhaseIdealLoop::compute_lca_of_uses(Node*, Node*, bool) (1 samples, 0.60%)</title><rect x="1070.6" y="611.0" width="7.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1073.6" y="622.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::dom_lca_for_get_late_ctrl_internal(Node*, Node*, Node*) (1 samples, 0.60%)</title><rect x="1070.6" y="595.0" width="7.0" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1073.6" y="606.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::dom_depth(Node*) const [clone .isra.194] (1 samples, 0.60%)</title><rect x="1070.6" y="579.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1073.6" y="590.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::dom_lca_for_get_late_ctrl_internal(Node*, Node*, Node*) (1 samples, 0.60%)</title><rect x="1077.6" y="611.0" width="7.0" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1080.6" y="622.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::is_dominator(Node*, Node*) (1 samples, 0.60%)</title><rect x="1084.6" y="611.0" width="7.1" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1087.6" y="622.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::split_if_with_blocks(VectorSet&amp;, Node_Stack&amp;) (2 samples, 1.19%)</title><rect x="1091.7" y="659.0" width="14.0" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="1094.7" y="670.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::split_if_with_blocks_pre(Node*) (1 samples, 0.60%)</title><rect x="1098.7" y="643.0" width="7.0" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1101.7" y="654.0"></text>
+</g>
+<g>
+<title>PhaseIdealLoop::split_thru_phi(Node*, Node*, int) (1 samples, 0.60%)</title><rect x="1098.7" y="627.0" width="7.0" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1101.7" y="638.0"></text>
+</g>
+<g>
+<title>LoadNode::Identity(PhaseTransform*) (1 samples, 0.60%)</title><rect x="1098.7" y="611.0" width="7.0" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1101.7" y="622.0"></text>
+</g>
+<g>
+<title>LoadNode::is_instance_field_load_with_local_phi(Node*) (1 samples, 0.60%)</title><rect x="1098.7" y="595.0" width="7.0" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1101.7" y="606.0"></text>
+</g>
+<g>
+<title>TypeInstPtr::add_offset(long) const (1 samples, 0.60%)</title><rect x="1098.7" y="579.0" width="7.0" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1101.7" y="590.0"></text>
+</g>
+<g>
+<title>TypeInstPtr::make(TypePtr::PTR, ciKlass*, bool, ciObject*, int, int, TypeOopPtr const*, int) (1 samples, 0.60%)</title><rect x="1098.7" y="563.0" width="7.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1101.7" y="574.0"></text>
+</g>
+<g>
+<title>TypeOopPtr::TypeOopPtr(Type::TYPES, TypePtr::PTR, ciKlass*, bool, ciObject*, int, int, TypeOopPtr const*, int) (1 samples, 0.60%)</title><rect x="1098.7" y="547.0" width="7.0" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1101.7" y="558.0"></text>
+</g>
+<g>
+<title>ciInstanceKlass::get_field_by_offset(int, bool) (1 samples, 0.60%)</title><rect x="1098.7" y="531.0" width="7.0" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="1101.7" y="542.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::optimize() (1 samples, 0.60%)</title><rect x="1105.7" y="675.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1108.7" y="686.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::transform_old(Node*) (1 samples, 0.60%)</title><rect x="1105.7" y="659.0" width="7.0" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1108.7" y="670.0"></text>
+</g>
+<g>
+<title>RegionNode::Ideal(PhaseGVN*, bool) (1 samples, 0.60%)</title><rect x="1105.7" y="643.0" width="7.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1108.7" y="654.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::remove_globally_dead_node(Node*) (1 samples, 0.60%)</title><rect x="1105.7" y="627.0" width="7.0" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1108.7" y="638.0"></text>
+</g>
+<g>
+<title>Unique_Node_List::remove(Node*) (1 samples, 0.60%)</title><rect x="1105.7" y="611.0" width="7.0" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1108.7" y="622.0"></text>
+</g>
+<g>
+<title>PhaseMacroExpand::expand_macro_nodes() (2 samples, 1.19%)</title><rect x="1112.7" y="675.0" width="14.1" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1115.7" y="686.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::optimize() (1 samples, 0.60%)</title><rect x="1112.7" y="659.0" width="7.1" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1115.7" y="670.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::transform_old(Node*) (1 samples, 0.60%)</title><rect x="1112.7" y="643.0" width="7.1" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="1115.7" y="654.0"></text>
+</g>
+<g>
+<title>PhiNode::Ideal(PhaseGVN*, bool) (1 samples, 0.60%)</title><rect x="1112.7" y="627.0" width="7.1" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="1115.7" y="638.0"></text>
+</g>
+<g>
+<title>PhaseIterGVN::transform_old(Node*) (1 samples, 0.60%)</title><rect x="1112.7" y="611.0" width="7.1" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1115.7" y="622.0"></text>
+</g>
+<g>
+<title>PhiNode::Ideal(PhaseGVN*, bool) (1 samples, 0.60%)</title><rect x="1112.7" y="595.0" width="7.1" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1115.7" y="606.0"></text>
+</g>
+<g>
+<title>PhiNode::split_out_instance(TypePtr const*, PhaseIterGVN*) const (1 samples, 0.60%)</title><rect x="1112.7" y="579.0" width="7.1" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1115.7" y="590.0"></text>
+</g>
+<g>
+<title>PhaseMacroExpand::expand_allocate_common(AllocateNode*, Node*, TypeFunc const*, unsigned char*) (1 samples, 0.60%)</title><rect x="1119.8" y="659.0" width="7.0" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="1122.8" y="670.0"></text>
+</g>
+<g>
+<title>PhaseRenumberLive::PhaseRenumberLive(PhaseGVN*, Unique_Node_List*, Unique_Node_List*, Phase::PhaseNumber) (1 samples, 0.60%)</title><rect x="1126.8" y="675.0" width="7.0" height="15" fill="#e5e545" rx="2" ry="2"/>
+<text x="1129.8" y="686.0"></text>
+</g>
+<g>
+<title>PhaseRemoveUseless::PhaseRemoveUseless(PhaseGVN*, Unique_Node_List*, Phase::PhaseNumber) (1 samples, 0.60%)</title><rect x="1126.8" y="659.0" width="7.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1129.8" y="670.0"></text>
+</g>
+<g>
+<title>Compile::update_dead_node_list(Unique_Node_List&amp;) (1 samples, 0.60%)</title><rect x="1126.8" y="643.0" width="7.0" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1129.8" y="654.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (6 samples, 3.57%)</title><rect x="1133.8" y="691.0" width="42.2" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1136.8" y="702.0">Pars..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (6 samples, 3.57%)</title><rect x="1133.8" y="675.0" width="42.2" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1136.8" y="686.0">Pars..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (6 samples, 3.57%)</title><rect x="1133.8" y="659.0" width="42.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1136.8" y="670.0">Pars..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (6 samples, 3.57%)</title><rect x="1133.8" y="643.0" width="42.2" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1136.8" y="654.0">Pars..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (6 samples, 3.57%)</title><rect x="1133.8" y="627.0" width="42.2" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1136.8" y="638.0">Pars..</text>
+</g>
+<g>
+<title>Parse::do_call() (6 samples, 3.57%)</title><rect x="1133.8" y="611.0" width="42.2" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1136.8" y="622.0">Pars..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (4 samples, 2.38%)</title><rect x="1133.8" y="595.0" width="28.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1136.8" y="606.0">Pa..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (4 samples, 2.38%)</title><rect x="1133.8" y="579.0" width="28.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1136.8" y="590.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (4 samples, 2.38%)</title><rect x="1133.8" y="563.0" width="28.1" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="1136.8" y="574.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (4 samples, 2.38%)</title><rect x="1133.8" y="547.0" width="28.1" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1136.8" y="558.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (4 samples, 2.38%)</title><rect x="1133.8" y="531.0" width="28.1" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1136.8" y="542.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_call() (4 samples, 2.38%)</title><rect x="1133.8" y="515.0" width="28.1" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="1136.8" y="526.0">Pa..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (4 samples, 2.38%)</title><rect x="1133.8" y="499.0" width="28.1" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1136.8" y="510.0">Pa..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (4 samples, 2.38%)</title><rect x="1133.8" y="483.0" width="28.1" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1136.8" y="494.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (4 samples, 2.38%)</title><rect x="1133.8" y="467.0" width="28.1" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="1136.8" y="478.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (4 samples, 2.38%)</title><rect x="1133.8" y="451.0" width="28.1" height="15" fill="#cbcb3d" rx="2" ry="2"/>
+<text x="1136.8" y="462.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (4 samples, 2.38%)</title><rect x="1133.8" y="435.0" width="28.1" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1136.8" y="446.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_call() (4 samples, 2.38%)</title><rect x="1133.8" y="419.0" width="28.1" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1136.8" y="430.0">Pa..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (4 samples, 2.38%)</title><rect x="1133.8" y="403.0" width="28.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1136.8" y="414.0">Pa..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (4 samples, 2.38%)</title><rect x="1133.8" y="387.0" width="28.1" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1136.8" y="398.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (4 samples, 2.38%)</title><rect x="1133.8" y="371.0" width="28.1" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1136.8" y="382.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (4 samples, 2.38%)</title><rect x="1133.8" y="355.0" width="28.1" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1136.8" y="366.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (4 samples, 2.38%)</title><rect x="1133.8" y="339.0" width="28.1" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1136.8" y="350.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_call() (4 samples, 2.38%)</title><rect x="1133.8" y="323.0" width="28.1" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1136.8" y="334.0">Pa..</text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (4 samples, 2.38%)</title><rect x="1133.8" y="307.0" width="28.1" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1136.8" y="318.0">Pa..</text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (4 samples, 2.38%)</title><rect x="1133.8" y="291.0" width="28.1" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1136.8" y="302.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (4 samples, 2.38%)</title><rect x="1133.8" y="275.0" width="28.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1136.8" y="286.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_block() (4 samples, 2.38%)</title><rect x="1133.8" y="259.0" width="28.1" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1136.8" y="270.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (4 samples, 2.38%)</title><rect x="1133.8" y="243.0" width="28.1" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1136.8" y="254.0">Pa..</text>
+</g>
+<g>
+<title>Parse::do_call() (2 samples, 1.19%)</title><rect x="1133.8" y="227.0" width="14.1" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1136.8" y="238.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.19%)</title><rect x="1133.8" y="211.0" width="14.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1136.8" y="222.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.19%)</title><rect x="1133.8" y="195.0" width="14.1" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1136.8" y="206.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (2 samples, 1.19%)</title><rect x="1133.8" y="179.0" width="14.1" height="15" fill="#caca3c" rx="2" ry="2"/>
+<text x="1136.8" y="190.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (2 samples, 1.19%)</title><rect x="1133.8" y="163.0" width="14.1" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="1136.8" y="174.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (2 samples, 1.19%)</title><rect x="1133.8" y="147.0" width="14.1" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1136.8" y="158.0"></text>
+</g>
+<g>
+<title>Parse::do_call() (2 samples, 1.19%)</title><rect x="1133.8" y="131.0" width="14.1" height="15" fill="#d6d640" rx="2" ry="2"/>
+<text x="1136.8" y="142.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.19%)</title><rect x="1133.8" y="115.0" width="14.1" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1136.8" y="126.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.19%)</title><rect x="1133.8" y="99.0" width="14.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1136.8" y="110.0"></text>
+</g>
+<g>
+<title>Parse::do_exits() (1 samples, 0.60%)</title><rect x="1133.8" y="83.0" width="7.0" height="15" fill="#d0d03e" rx="2" ry="2"/>
+<text x="1136.8" y="94.0"></text>
+</g>
+<g>
+<title>PhaseGVN::transform_no_reclaim(Node*) (1 samples, 0.60%)</title><rect x="1133.8" y="67.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1136.8" y="78.0"></text>
+</g>
+<g>
+<title>PhiNode::Ideal(PhaseGVN*, bool) (1 samples, 0.60%)</title><rect x="1133.8" y="51.0" width="7.0" height="15" fill="#e2e244" rx="2" ry="2"/>
+<text x="1136.8" y="62.0"></text>
+</g>
+<g>
+<title>PhiNode::unique_input(PhaseTransform*) (1 samples, 0.60%)</title><rect x="1133.8" y="35.0" width="7.0" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1136.8" y="46.0"></text>
+</g>
+<g>
+<title>ciMethod::method_data() [clone .part.188] (1 samples, 0.60%)</title><rect x="1140.8" y="83.0" width="7.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1143.8" y="94.0"></text>
+</g>
+<g>
+<title>ciObjectFactory::get_metadata(Metadata*) (1 samples, 0.60%)</title><rect x="1140.8" y="67.0" width="7.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1143.8" y="78.0"></text>
+</g>
+<g>
+<title>ciObjectFactory::create_new_metadata(Metadata*) (1 samples, 0.60%)</title><rect x="1140.8" y="51.0" width="7.1" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1143.8" y="62.0"></text>
+</g>
+<g>
+<title>ciMethodData::ciMethodData(MethodData*) (1 samples, 0.60%)</title><rect x="1140.8" y="35.0" width="7.1" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1143.8" y="46.0"></text>
+</g>
+<g>
+<title>Parse::do_field_access(bool, bool) (2 samples, 1.19%)</title><rect x="1147.9" y="227.0" width="14.0" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1150.9" y="238.0"></text>
+</g>
+<g>
+<title>Parse::do_get_xxx(Node*, ciField*, bool) (1 samples, 0.60%)</title><rect x="1147.9" y="211.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1150.9" y="222.0"></text>
+</g>
+<g>
+<title>PhaseGVN::transform_no_reclaim(Node*) (1 samples, 0.60%)</title><rect x="1147.9" y="195.0" width="7.0" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1150.9" y="206.0"></text>
+</g>
+<g>
+<title>TypeInstPtr::add_offset(long) const (1 samples, 0.60%)</title><rect x="1147.9" y="179.0" width="7.0" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1150.9" y="190.0"></text>
+</g>
+<g>
+<title>Type::hashcons() (1 samples, 0.60%)</title><rect x="1147.9" y="163.0" width="7.0" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1150.9" y="174.0"></text>
+</g>
+<g>
+<title>Dict::Insert(void*, void*, bool) (1 samples, 0.60%)</title><rect x="1147.9" y="147.0" width="7.0" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1150.9" y="158.0"></text>
+</g>
+<g>
+<title>Dict::doubhash() (1 samples, 0.60%)</title><rect x="1147.9" y="131.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1150.9" y="142.0"></text>
+</g>
+<g>
+<title>__memcpy_ssse3_back (1 samples, 0.60%)</title><rect x="1147.9" y="115.0" width="7.0" height="15" fill="#e45e5e" rx="2" ry="2"/>
+<text x="1150.9" y="126.0"></text>
+</g>
+<g>
+<title>Parse::do_put_xxx(Node*, ciField*, bool) (1 samples, 0.60%)</title><rect x="1154.9" y="211.0" width="7.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1157.9" y="222.0"></text>
+</g>
+<g>
+<title>GraphKit::store_oop(Node*, Node*, Node*, TypePtr const*, Node*, TypeOopPtr const*, BasicType, bool, MemNode::MemOrd, bool) (1 samples, 0.60%)</title><rect x="1154.9" y="195.0" width="7.0" height="15" fill="#dfdf43" rx="2" ry="2"/>
+<text x="1157.9" y="206.0"></text>
+</g>
+<g>
+<title>GraphKit::g1_write_barrier_pre(bool, Node*, Node*, unsigned int, Node*, TypeOopPtr const*, Node*, BasicType) (1 samples, 0.60%)</title><rect x="1154.9" y="179.0" width="7.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1157.9" y="190.0"></text>
+</g>
+<g>
+<title>PhaseGVN::transform_no_reclaim(Node*) (1 samples, 0.60%)</title><rect x="1154.9" y="163.0" width="7.0" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1157.9" y="174.0"></text>
+</g>
+<g>
+<title>TypeLong::singleton() const (1 samples, 0.60%)</title><rect x="1154.9" y="147.0" width="7.0" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1157.9" y="158.0"></text>
+</g>
+<g>
+<title>PredictedCallGenerator::generate(JVMState*) (2 samples, 1.19%)</title><rect x="1161.9" y="595.0" width="14.1" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1164.9" y="606.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.19%)</title><rect x="1161.9" y="579.0" width="14.1" height="15" fill="#d5d540" rx="2" ry="2"/>
+<text x="1164.9" y="590.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.19%)</title><rect x="1161.9" y="563.0" width="14.1" height="15" fill="#cece3e" rx="2" ry="2"/>
+<text x="1164.9" y="574.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (2 samples, 1.19%)</title><rect x="1161.9" y="547.0" width="14.1" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1164.9" y="558.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (2 samples, 1.19%)</title><rect x="1161.9" y="531.0" width="14.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1164.9" y="542.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (2 samples, 1.19%)</title><rect x="1161.9" y="515.0" width="14.1" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1164.9" y="526.0"></text>
+</g>
+<g>
+<title>Parse::do_call() (2 samples, 1.19%)</title><rect x="1161.9" y="499.0" width="14.1" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="1164.9" y="510.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (2 samples, 1.19%)</title><rect x="1161.9" y="483.0" width="14.1" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1164.9" y="494.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (2 samples, 1.19%)</title><rect x="1161.9" y="467.0" width="14.1" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1164.9" y="478.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (2 samples, 1.19%)</title><rect x="1161.9" y="451.0" width="14.1" height="15" fill="#d3d33f" rx="2" ry="2"/>
+<text x="1164.9" y="462.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (2 samples, 1.19%)</title><rect x="1161.9" y="435.0" width="14.1" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1164.9" y="446.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (2 samples, 1.19%)</title><rect x="1161.9" y="419.0" width="14.1" height="15" fill="#dede43" rx="2" ry="2"/>
+<text x="1164.9" y="430.0"></text>
+</g>
+<g>
+<title>Parse::do_call() (2 samples, 1.19%)</title><rect x="1161.9" y="403.0" width="14.1" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1164.9" y="414.0"></text>
+</g>
+<g>
+<title>Compile::call_generator(ciMethod*, int, bool, JVMState*, bool, float, ciKlass*, bool, bool) (1 samples, 0.60%)</title><rect x="1161.9" y="387.0" width="7.0" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1164.9" y="398.0"></text>
+</g>
+<g>
+<title>InlineTree::ok_to_inline(ciMethod*, JVMState*, ciCallProfile&amp;, WarmCallInfo*, bool&amp;) (1 samples, 0.60%)</title><rect x="1161.9" y="371.0" width="7.0" height="15" fill="#d8d841" rx="2" ry="2"/>
+<text x="1164.9" y="382.0"></text>
+</g>
+<g>
+<title>InlineTree::build_inline_tree_for_callee(ciMethod*, JVMState*, int) (1 samples, 0.60%)</title><rect x="1161.9" y="355.0" width="7.0" height="15" fill="#e3e345" rx="2" ry="2"/>
+<text x="1164.9" y="366.0"></text>
+</g>
+<g>
+<title>InlineTree::InlineTree(Compile*, InlineTree const*, ciMethod*, JVMState*, int, float, int) (1 samples, 0.60%)</title><rect x="1161.9" y="339.0" width="7.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1164.9" y="350.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (1 samples, 0.60%)</title><rect x="1168.9" y="387.0" width="7.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1171.9" y="398.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (1 samples, 0.60%)</title><rect x="1168.9" y="371.0" width="7.1" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1171.9" y="382.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (1 samples, 0.60%)</title><rect x="1168.9" y="355.0" width="7.1" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1171.9" y="366.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (1 samples, 0.60%)</title><rect x="1168.9" y="339.0" width="7.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1171.9" y="350.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (1 samples, 0.60%)</title><rect x="1168.9" y="323.0" width="7.1" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1171.9" y="334.0"></text>
+</g>
+<g>
+<title>Parse::do_call() (1 samples, 0.60%)</title><rect x="1168.9" y="307.0" width="7.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1171.9" y="318.0"></text>
+</g>
+<g>
+<title>ParseGenerator::generate(JVMState*) (1 samples, 0.60%)</title><rect x="1168.9" y="291.0" width="7.1" height="15" fill="#e1e144" rx="2" ry="2"/>
+<text x="1171.9" y="302.0"></text>
+</g>
+<g>
+<title>Parse::Parse(JVMState*, ciMethod*, float) (1 samples, 0.60%)</title><rect x="1168.9" y="275.0" width="7.1" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1171.9" y="286.0"></text>
+</g>
+<g>
+<title>Parse::do_all_blocks() (1 samples, 0.60%)</title><rect x="1168.9" y="259.0" width="7.1" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1171.9" y="270.0"></text>
+</g>
+<g>
+<title>Parse::do_one_block() (1 samples, 0.60%)</title><rect x="1168.9" y="243.0" width="7.1" height="15" fill="#d7d741" rx="2" ry="2"/>
+<text x="1171.9" y="254.0"></text>
+</g>
+<g>
+<title>Parse::do_one_bytecode() (1 samples, 0.60%)</title><rect x="1168.9" y="227.0" width="7.1" height="15" fill="#d4d440" rx="2" ry="2"/>
+<text x="1171.9" y="238.0"></text>
+</g>
+<g>
+<title>Parse::return_current(Node*) (1 samples, 0.60%)</title><rect x="1168.9" y="211.0" width="7.1" height="15" fill="#d2d23f" rx="2" ry="2"/>
+<text x="1171.9" y="222.0"></text>
+</g>
+<g>
+<title>Parse::call_register_finalizer() (1 samples, 0.60%)</title><rect x="1168.9" y="195.0" width="7.1" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1171.9" y="206.0"></text>
+</g>
+<g>
+<title>Node::Node(Node*) (1 samples, 0.60%)</title><rect x="1168.9" y="179.0" width="7.1" height="15" fill="#e0e044" rx="2" ry="2"/>
+<text x="1171.9" y="190.0"></text>
+</g>
+<g>
+<title>Compiler::compile_method(ciEnv*, ciMethod*, int) (2 samples, 1.19%)</title><rect x="1176.0" y="723.0" width="14.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1179.0" y="734.0"></text>
+</g>
+<g>
+<title>Compilation::Compilation(AbstractCompiler*, ciEnv*, ciMethod*, int, BufferBlob*) (2 samples, 1.19%)</title><rect x="1176.0" y="707.0" width="14.0" height="15" fill="#cccc3d" rx="2" ry="2"/>
+<text x="1179.0" y="718.0"></text>
+</g>
+<g>
+<title>Compilation::compile_method() (2 samples, 1.19%)</title><rect x="1176.0" y="691.0" width="14.0" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1179.0" y="702.0"></text>
+</g>
+<g>
+<title>Compilation::compile_java_method() (2 samples, 1.19%)</title><rect x="1176.0" y="675.0" width="14.0" height="15" fill="#c9c93c" rx="2" ry="2"/>
+<text x="1179.0" y="686.0"></text>
+</g>
+<g>
+<title>Compilation::build_hir() (2 samples, 1.19%)</title><rect x="1176.0" y="659.0" width="14.0" height="15" fill="#dcdc42" rx="2" ry="2"/>
+<text x="1179.0" y="670.0"></text>
+</g>
+<g>
+<title>IR::IR(Compilation*, ciMethod*, int) (1 samples, 0.60%)</title><rect x="1176.0" y="643.0" width="7.0" height="15" fill="#cdcd3d" rx="2" ry="2"/>
+<text x="1179.0" y="654.0"></text>
+</g>
+<g>
+<title>IRScope::IRScope(Compilation*, IRScope*, int, ciMethod*, int, bool) (1 samples, 0.60%)</title><rect x="1176.0" y="627.0" width="7.0" height="15" fill="#dada42" rx="2" ry="2"/>
+<text x="1179.0" y="638.0"></text>
+</g>
+<g>
+<title>GraphBuilder::GraphBuilder(Compilation*, IRScope*) (1 samples, 0.60%)</title><rect x="1176.0" y="611.0" width="7.0" height="15" fill="#dddd43" rx="2" ry="2"/>
+<text x="1179.0" y="622.0"></text>
+</g>
+<g>
+<title>GraphBuilder::iterate_all_blocks(bool) (1 samples, 0.60%)</title><rect x="1176.0" y="595.0" width="7.0" height="15" fill="#d9d941" rx="2" ry="2"/>
+<text x="1179.0" y="606.0"></text>
+</g>
+<g>
+<title>GraphBuilder::iterate_bytecodes_for_block(int) (1 samples, 0.60%)</title><rect x="1176.0" y="579.0" width="7.0" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1179.0" y="590.0"></text>
+</g>
+<g>
+<title>GraphBuilder::invoke(Bytecodes::Code) (1 samples, 0.60%)</title><rect x="1176.0" y="563.0" width="7.0" height="15" fill="#c8c83c" rx="2" ry="2"/>
+<text x="1179.0" y="574.0"></text>
+</g>
+<g>
+<title>GraphBuilder::try_inline(ciMethod*, bool, Bytecodes::Code, Instruction*) (1 samples, 0.60%)</title><rect x="1176.0" y="547.0" width="7.0" height="15" fill="#d1d13f" rx="2" ry="2"/>
+<text x="1179.0" y="558.0"></text>
+</g>
+<g>
+<title>GraphBuilder::try_inline_full(ciMethod*, bool, Bytecodes::Code, Instruction*) (1 samples, 0.60%)</title><rect x="1176.0" y="531.0" width="7.0" height="15" fill="#cfcf3e" rx="2" ry="2"/>
+<text x="1179.0" y="542.0"></text>
+</g>
+<g>
+<title>ProfileCall::visit(InstructionVisitor*) (1 samples, 0.60%)</title><rect x="1176.0" y="515.0" width="7.0" height="15" fill="#dbdb42" rx="2" ry="2"/>
+<text x="1179.0" y="526.0"></text>
+</g>
+<g>
+<title>__GI_qsort (1 samples, 0.60%)</title><rect x="1183.0" y="643.0" width="7.0" height="15" fill="#fa7c7c" rx="2" ry="2"/>
+<text x="1186.0" y="654.0"></text>
+</g>
+</g>
+</svg>
