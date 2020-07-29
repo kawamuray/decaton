@@ -1,0 +1,17 @@
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenLocal()
+}
+
+dependencies {
+    compile project(":processor")
+    compile project(":testing")
+    compile "wasmtime:wasmtime-java:0.1.0"
+}
+
+application {
+    mainClassName = 'com.linecorp.decaton.wasmton.Wasmton'
+}
