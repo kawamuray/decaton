@@ -9,7 +9,7 @@ repositories {
 dependencies {
     compile project(":processor")
     compile project(":testing")
-    compile "wasmtime:wasmtime-java:0.1.0"
+    compile files("../../wasmtime-java/build/libs/wasmtime-java-0.1.0.jar")
 }
 
 application {
